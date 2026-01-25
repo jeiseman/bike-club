@@ -1,0 +1,65 @@
+//run code only after the whole page is loaded
+jQuery(document).ready( function($){ 
+
+//when the button is clicked run the ajax function
+$("#mystatus" ).change(runMyStatus);
+if ($(".ride_attend")[0]) {
+   $(window).on("beforeunload", runMyStatus);
+}
+
+ function runMyStatus() {
+  var mystatus = $('#mystatus').val();
+  var rideID = $('#rideID').val();
+  var car_license = $('#car_lic').val();
+  var emergency_phone = $('#emrg_fone').val();
+  var cell_phone = $('#cell_fone').val();
+  var data = {
+        'action': 'bikeride_mystatus_function', //the function in php functions to call
+        'mystatus': mystatus,
+        'rideID' : rideID,
+        'car_license' : car_license,
+        'emergency_phone' : emergency_phone,
+        'cell_phone' : cell_phone,
+        'nonce': frontEndAjax.nonce
+    };
+
+ //send data to the php file admin-ajax which was stored in the variable ajaxurl
+   $.post(frontEndAjax.ajaxurl, data, function(response) {
+         if (response.data_from_backend != $('#rideAttendees').html()) {
+             $('#rideAttendees').html(response.data_from_backend);
+         }
+      }, 'json' );
+ } // end runMyStatus
+    $( "#post-4291 #input_7_5" ).datepicker({ 
+        minDate: '+0d',
+        dateFormat: 'mm/dd/yy',
+        defaultDate: '+0d',
+        gotoCurrent: true,
+        prevText: '',
+        showOn: 'both',
+        buttonImage: '/wp-content/plugins/gravityforms/images/calendar.png',
+        buttonImageOnly: true
+    });
+    $( "#input_7_5" ).datepicker({ 
+        dateFormat: 'mm/dd/yy',
+        defaultDate: '+0d',
+        gotoCurrent: true,
+        prevText: '',
+        showOn: 'both',
+        buttonImage: '/wp-content/plugins/gravityforms/images/calendar.png',
+        buttonImageOnly: true
+    });
+    $('#reset').click(function() {
+        $(':input','#gform_6')
+            .not(':button, :submit, :reset, :hidden, :radio')
+            .val('')
+            .removeAttr('checked')
+            .removeAttr('selected');
+    });
+    $('#ride-list img').removeAttr("srcset");
+    $('.elementor-social-icon-facebook-f').prop("title", "Facebook");
+    $('.elementor-social-icon-twitter').prop("title", "Twitter");
+    $('.elementor-social-icon-instagram').prop("title", "Instagram");
+    $('.elementor-social-icon-strava').prop("title", "Strava");
+    $('.elementor-repeater-item-f98c51b').prop("title", "Ride with GPS");
+});

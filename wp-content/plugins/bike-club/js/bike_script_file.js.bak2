@@ -1,0 +1,38 @@
+//run code only after the whole page is loaded
+jQuery(document).ready( function($){ 
+
+//when the button is clicked run the ajax function
+$( "#mystatus" ).change(runMyStatus);
+
+ function runMyStatus() {
+  var mystatus = this.value;
+  var rideID = $('#rideID').val();
+  var car_license = $('#car_lic').val();
+  var emergency_phone = $('#emrg_fone').val();
+  var data = {
+        'action': 'bikeride_mystatus_function', //the function in php functions to call
+        'mystatus': mystatus,
+        'rideID' : rideID,
+        'car_license' : car_license,
+        'emergency_phone' : emergency_phone,
+        'nonce': frontEndAjax.nonce
+    };
+
+ //send data to the php file admin-ajax which was stored in the variable ajaxurl
+   var ajaxRequest = $.ajax({
+       url: frontEndAjax.ajaxurl,
+       type: "post",
+       data: data
+   });
+   ajaxRequest.done(function(response) {
+       alert(response.data_from_backend);
+       if (response.data_from_backend !== $('#rideAttendees').html()) {
+           $('#rideAttendees').html(response.data_from_backend);
+       }
+   });
+   ajaxRequest.fail(function(jqXHR, textStatus, exception) {
+           alert('Fail');
+   });
+ } // end runMyStatus
+// end document ready
+});

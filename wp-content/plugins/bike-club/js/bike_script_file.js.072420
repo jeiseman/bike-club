@@ -1,0 +1,187 @@
+//run code only after the whole page is loaded
+jQuery(document).ready( function($){ 
+
+//when the button is clicked run the ajax function
+$("#mystatus" ).change(runMyStatus);
+
+if ($(".ride_attend")[0]) {
+   $(window).on("beforeunload", runMyStatus);
+}
+
+$('.ride-update-button').click(runMyStatus);
+
+ function runMyStatus() {
+  var mystatus = $('#mystatus').val();
+  var rideID = $('#rideID').val();
+  var car_license = $('#car_lic').val();
+  var emergency_phone = $('#emrg_fone').val();
+  var cell_phone = $('#cell_fone').val();
+  var data = {
+        'action': 'bikeride_mystatus_function', //the function in php functions to call
+        'mystatus': mystatus,
+        'rideID' : rideID,
+        'car_license' : car_license,
+        'emergency_phone' : emergency_phone,
+        'cell_phone' : cell_phone,
+        'nonce': frontEndAjax.nonce
+    };
+
+    var na = $('.notification-area');
+    na.val('Form values updated!');
+    if (data.mystatus == "Maybe") {
+       na.val("Please update your status to 'Yes' or 'No' on the day of the ride");
+    }
+    else {
+       na.val('Form values updated!');
+    }
+    // na.show();
+    setTimeout(function(){
+        na.val('');
+        // na.hide();
+    }, 10000);
+
+ //send data to the php file admin-ajax which was stored in the variable ajaxurl
+   $.post(frontEndAjax.ajaxurl, data, function(response) {
+         if (response.data_from_backend != $('#rideAttendees').html()) {
+             $('#rideAttendees').html(response.data_from_backend);
+         }
+         if (response.waitlisted != $('#waitList').html()) {
+             $('#waitList').html(response.waitlisted);
+         }
+		 if (response.remaining != $('#signups-remaining').html()) {
+		     $('#signups-remaining').html(response.remaining);
+		 }
+      }, 'json' );
+ } // end runMyStatus
+
+if (typeof($.datepicker) != "undefined") {
+    jQuery.datepicker._checkExternalClick = function() {};
+    // $(document).unbind('mousedown', $.datepicker._checkExternalClick);
+}
+if ( $( ".datepicker" ).length ) {
+    $( "#post-4291 #input_7_5" ).datepicker({ 
+		firstDay: '0',
+        minDate: '+0d',
+        dateFormat: 'mm/dd/yy',
+        defaultDate: '+0d',
+        gotoCurrent: true,
+        prevText: '',
+        showOn: 'both',
+        buttonImage: '/wp-content/plugins/gravityforms/images/calendar.png',
+        buttonImageOnly: true
+    });
+    $( "#input_7_5" ).datepicker({ 
+		firstDay: '0',
+        dateFormat: 'mm/dd/yy',
+        defaultDate: '+0d',
+        gotoCurrent: true,
+        prevText: '',
+        showOn: 'both',
+        buttonImage: '/wp-content/plugins/gravityforms/images/calendar.png',
+        buttonImageOnly: true
+    });
+}
+    $('#reset').click(function() {
+        $(':input','#gform_6')
+            .chosen("destroy")
+            .not(':button, :submit, :reset, :hidden, :radio')
+            .val('')
+            .removeAttr('checked')
+            .removeAttr('selected');
+        $('.result-selected').removeClass('result-selected');
+        $('.gf_placeholder').addClass('result-selected');
+    });
+    $('#ride-list img').removeAttr("srcset");
+    $('.elementor-social-icon-facebook-f').prop("title", "Facebook");
+    $('.elementor-social-icon-twitter').prop("title", "Twitter");
+    $('.elementor-social-icon-instagram').prop("title", "Instagram");
+    $('.elementor-social-icon-strava').prop("title", "Strava");
+    $('.elementor-repeater-item-f98c51b').prop("title", "Ride with GPS");
+    $('#strava-id').attr("title", "Current Rides on Strava");
+    $('.field_first-and-last-name a').contents().unwrap();
+    var href = window.location.href;
+    if (href.indexOf("start-points") > -1 ||
+            href.indexOf("food-stops") > -1 ||
+            href.indexOf("road-closures") > -1 ||
+            href.indexOf("weather") > -1 ||
+            href.indexOf("pace-terrain-information") > -1) {
+        $(".menu-item-14913 a").addClass("elementor-item-active");
+    }
+    else if (href.indexOf("newsletter") > -1 ||
+            href.indexOf("photos-3") > -1) {
+        $(".menu-item-15305 a").addClass("elementor-item-active");
+    }
+    else if (href.indexOf("member-directory") > -1 ||
+            href.indexOf("membership-account") > -1) {
+        $(".menu-item-14942 a").addClass("elementor-item-active");
+    }
+    else if (href.indexOf("search-tours-schedule-rides") > -1 ||
+            href.indexOf("my-lead-rides") > -1 ||
+            href.indexOf("crash-report-2") > -1) {
+        $(".menu-item-15628 a").addClass("elementor-item-active");
+    }
+    else if (href.indexOf("add-tour-2") > -1 ||
+            href.indexOf("add-ride-edit-tour") > -1 ||
+            href.indexOf("startpoint-list") > -1 ||
+            href.indexOf("ride-leader-report") > -1 ||
+            href.indexOf("email-broadcast-2") > -1) {
+        $(".menu-item-15785 a").addClass("elementor-item-active");
+    }
+    $('li#wp-admin-bar-my-account-xprofile-public').remove();
+    $('li#wp-admin-bar-my-account-xprofile-edit').remove();
+    var getUrlParameter = function getUrlParameter(sParam) {
+        var sPageURL = window.location.search.substring(1),
+            sURLVariables = sPageURL.split('&'),
+            sParameterName,
+            i;
+
+        for (i = 0; i < sURLVariables.length; i++) {
+            sParameterName = sURLVariables[i].split('=');
+
+            if (sParameterName[0] === sParam) {
+                return sParameterName[1] === undefined ? true : decodeURIComponent(sParameterName[1]);
+            }
+        }
+    };
+
+    if (getUrlParameter('riderole') != 2) {
+        $('#input_7_21 option:not(:selected)').attr('disabled', true);
+    }
+    // $('select#bcountry').attr('disabled', 'disabled');
+    // $('.notification-area').hide();
+	if ($(window).width() >= 1100) {
+        var descriptionHeight = $('.ride_description').height();
+        var attendHeight = $('.ride_attend').height();
+        if (descriptionHeight > attendHeight) {
+            $('.ride_attend').height(descriptionHeight);
+        }
+        else {
+            $('.ride_description').height(attendHeight);
+        }
+	}
+    // event listener, and run once when this script loads
+    window.addEventListener( 'resize', fixadminbar );
+    fixadminbar();
+
+    function fixadminbar() {
+
+        // get adminbar height, 'css' will be true if bar is present, false if not
+        var ah = $( '#wpadminbar' ).outerHeight(), 
+            css = typeof( ah ) !== 'undefined',
+            $head = $('head');
+
+        // if 'css' is true, change value to CSS rules
+        css = css 
+            ? 'html{margin-top:initial !important}'
+                + 'body::before{content:"";height:' + ah + 'px;display:block}' 
+            : css;
+
+        // if this has been written before, remove old version
+        $head.find('#wpadfx').remove();
+        // append new if bar is present
+        if ( css )
+            $head.append('<style id="wpadfx">' + css + '</style>');
+    }
+    // $(window).on('orientationchange' function(e) { window.location.reload(); };
+    // $(window).on('resize' function(e) { window.location.reload(); };
+});
