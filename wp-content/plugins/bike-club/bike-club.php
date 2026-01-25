@@ -3229,7 +3229,8 @@ function rideleader_signupcheck($start_time, $tourid)
 	    return 0;
 	// error_log("starttime:" . $start_time->format("Y-m-d"));
 	// error_log("tourid:" . $tourid);
-    $startid = get_post_meta($tourid, 'start_point', true);
+    $tpod = pods('tour', $tourid);
+    $startid = $tpod->field('start_point');
     if (is_array($startid))
 	    $startid = $startid['ID'];
 
@@ -3287,7 +3288,8 @@ function rideleader_signupcheck($start_time, $tourid)
                 $tourid = $tourid['ID'];
 			if (!empty($tourid)) {
 			    // error_log("tourid:" . $tourid);
-			    $start = get_post_meta($tourid, 'start_point', true);
+                $tpod = pods('tour', $tourid);
+			    $start = $tpod->field('start_point');
                 if (is_array($start))
                     $start = $start['ID'];
 				if (!empty($start)) {
@@ -7323,7 +7325,6 @@ function bk_become_ride_leader() {
 		$rl = $rpod->field('ride_leader');
 		// $rpod->save('ride-status', 0);
         wp_update_post([ 'ID' => $rideid, 'post_author' => $userid ]);
-		$rpod->save('ride_leader', $userid);
 		$rpod->save('ride-status', 0);
         bk_add_ride_leader_to_ride($rideid, $rpod);
         bk_send_ride_email_if_needed($rpod, $rideid, $userid);
