@@ -70,6 +70,7 @@ $tz = new DateTimeZone(wp_timezone_string());
 $start_time = DateTime::createFromFormat("m/d/Y h:i a", $datestr, $tz);
 $sttime = $start_time->getTimeStamp();
 $heading = "<b>Starts:</b> ";
+$heading = "<b>Starts:</b> ";
 if ($ridestatus == 2) { // canceled
    $heading = "<b>Ride canceled, was scheduled for</b> ";
 }

@@ -1,13 +1,13 @@
 <?php
 /*
 Plugin Name: Bike Club
-Plugin URI: 
+Plugin URI:
 Description: Add bike club specific features
 Version: 0.1
 Author: Jonathan Eiseman
-Author URI: 
-License: 
-License URI: 
+Author URI:
+License:
+License URI:
 */
 
 include( plugin_dir_path( __FILE__ ) . 'ron.php');
@@ -23,7 +23,7 @@ use Dompdf\Dompdf;
 
 const PROPOSED_RIDE_LEADER_USERID = 5658;
 
-/* 
+/*
 global $pmprosm_sponsored_account_levels;
 $pmprosm_sponsored_account_levels = array (
     4 => array(
@@ -131,7 +131,7 @@ function remove_admin_bar() {
 }
 
 function bike_scripts(){
-    //file where AJAX code will be found 
+    //file where AJAX code will be found
 	if ( is_front_page() )
         wp_enqueue_script( 'bk-slider-handle', plugins_url('js/slider.js', __FILE__), array('jquery'), "3.10" );
     wp_enqueue_script( 'bk-script-handle', plugins_url('js/bike_script_file.js', __FILE__), array('jquery'), "3.27" );
@@ -155,33 +155,33 @@ function convertDateFormat($date, $informat, $outformat)
 
 function bk_move_from_waitlist($rpod, $wlapod) {
     $tz = new DateTimeZone(wp_timezone_string());
-    $ride_date = $rpod->get_ride_date(true);
-    $start_time = $rpod->get_time(true);
+    $ride_date = $rpod->display('ride_date');
+    $start_time = $rpod->display('time');
 	$ridestart = new DateTime($ride_date . ' ' . $start_time, $tz);
 	$mintime = new DateTime("now", $tz);
 	if ($ridestart < $mintime)
 	    return;
-    $wlapod->set_wait_list_number(0);
-    $rider = $wlapod->get_rider();
+    $wlapod->save('wait_list_number', 0);
+    $rider = $wlapod->field('rider');
     if ( ! $rider )
 		return;
-	$rideid = $rpod->get_ID();
+	$rideid = $rpod->field('ID');
     bk_attendee_list_change( $rpod, $wlapod, "No", 0, true );
     bk_remove_from_other_rides($rider['ID'], $rideid);
-    $tourfield = $rpod->get_tour();
+    $tourfield = $rpod->field('tour');
     $tourid = $tourfield['ID'];
-    $tpod = new BikeClubTour($tourid);
-    $start = $tpod->get_start_point(true);
-    $rl = $rpod->get_ride_leader();
+    $tpod = pods('tour', $tourid);
+    $start = $tpod->display('start_point');
+    $rl = $rpod->field('ride_leader');
     $rlid = $rl['ID'];
-    $rlpod = new BikeClubUser($rlid);
+    $rlpod = pods('user', $rlid);
     $dow_obj = new DateTime($ride_date, $tz);
     $dow = $dow_obj->format("l");
-    $leader = $rlpod->get_display_name();
+    $leader = $rlpod->field('display_name');
     $user_info = get_userdata($rider['ID']);
     $to_email = $user_info->user_email;
-    $rc = new BikeClubRole(13256);
-	$rc_user = $rc->get_member();
+    $rc = pods('role', 13256);
+	$rc_user = $rc->field('member');
     $fromname = $rc_user['display_name'];
     // $from = 'ridecoordinator@email.mafw.org';
     $from = 'ridecoordinator@mafw.org';
@@ -193,7 +193,7 @@ function bk_move_from_waitlist($rpod, $wlapod) {
 function bk_find_wl_apod($rpod)
 {
 	$wlapod = 0;
-	$attendees = get_post_meta($rpod->get_ID(), '_pods_attendees', true);
+	$attendees = get_post_meta($rpod->field('ID'), '_pods_attendees', true);
 	$min_wlnum = 10000;
     if (!empty($attendees)) {
 		$userid_arr = array();
@@ -213,10 +213,10 @@ function bk_find_wl_apod($rpod)
             $user = get_userdata($userid);
 			if (empty($user))
 			    continue;
-            $apod = new BikeClubRideAttendee($attendeeid);
-			$ra_status = $apod->get_ride_attendee_status();
+            $apod = pods('ride-attendee', $attendeeid);
+			$ra_status = $apod->field('ride_attendee_status');
 			if ($ra_status != "No") {
-			    $wlnum = $apod->get_wait_list_number();
+			    $wlnum = $apod->field('wait_list_number');
 				if (empty($wlnum))
 				    $wlnum = 0;
 				if ($wlnum != 0) {
@@ -233,8 +233,8 @@ function bk_find_wl_apod($rpod)
 
 function bk_attendee_list_change( $rpod, $aid, $status = "No", $remain = 0, $from_wl = false, $ride_attendees = null, $waitlist = null )
 {
-	$do_notification = $rpod->get_ride_attendee_notification();
-	$send_text = $rpod->get_send_text_message();
+	$do_notification = $rpod->field("ride_attendee_notification");
+	$send_text = $rpod->field("send_text_message");
 	if ( empty($do_notification) && empty($send_text) ) {
 		return;
 	}
@@ -242,18 +242,18 @@ function bk_attendee_list_change( $rpod, $aid, $status = "No", $remain = 0, $fro
 	if ( $ride_attendees === null )  {
 		$count = ride_attendees($rpod, $ride_attendees, $waitlist);
 	}
-	$rl = $rpod->get_ride_leader();
+	$rl = $rpod->field('ride_leader');
 	if ( $rl !== false ) {
 	    $rlid = $rl['ID'];
-	    $rlpod = new BikeClubUser($rlid);
-        $apod = new BikeClubRideAttendee($aid);
-		$rider = $apod->get_rider();
+	    $rlpod = pods("user", $rlid);
+        $apod = pods('ride-attendee', $aid);
+		$rider = $apod->field('rider');
 		if ( $rider ) {
 			$user_info = get_userdata($rider['ID']);
 		}
 		else {
 			$userid = get_post_field('post_author', $aid);
-    		$user_info = get_userdata($userid);
+		$user_info = get_userdata($userid);
 		}
 		$rider_name = $user_info ? $user_info->display_name : "";
 		$msg = $rider_name;
@@ -261,7 +261,7 @@ function bk_attendee_list_change( $rpod, $aid, $status = "No", $remain = 0, $fro
 			$msg .= " added to ride from waitlist on your ride: ";
 		}
 		else if ( $status == "No" ) {
-			$wlnum = $apod->get_wait_list_number();
+			$wlnum = $apod->field('wait_list_number');
 			if ( !empty($wlnum) && $wlnum > 0 ) {
 				$msg .= " removed from waitlist on your ride: ";
 			}
@@ -270,7 +270,7 @@ function bk_attendee_list_change( $rpod, $aid, $status = "No", $remain = 0, $fro
 			}
 		}
 		else {
-			$wlnum = $apod->get_wait_list_number();
+			$wlnum = $apod->field('wait_list_number');
 			if ( !empty($wlnum) && $wlnum > 0 ) {
 				$msg .= " added to waitlist on your ride: ";
 			}
@@ -278,42 +278,42 @@ function bk_attendee_list_change( $rpod, $aid, $status = "No", $remain = 0, $fro
 				$msg .= " added to your ride: ";
 			}
 		}
-	$ride_date = $rpod->get_ride_date(true);
-    	$tz = new DateTimeZone(wp_timezone_string());
-    	$dow_obj = new DateTime($ride_date, $tz);
-    	$dow = $dow_obj->format("l");
+	$ride_date = $rpod->display('ride_date');
+	$tz = new DateTimeZone(wp_timezone_string());
+	$dow_obj = new DateTime($ride_date, $tz);
+	$dow = $dow_obj->format("l");
 		$ride_date = $dow . ", " . $ride_date;
-	$start_time = $rpod->get_time(true);
+	$start_time = $rpod->display('time');
 		$txtmsg = $msg;
 		if ( $do_notification ) {
-		$rl_email = $rlpod->get_user_email();
+		$rl_email = $rlpod->field('user_email');
 			$msg .= "<br />Ride Attendees: " . $ride_attendees;
 			if (!empty($waitlist)) {
-		    	$msg .= "<br />Waitlist: " . $waitlist;
+			$msg .= "<br />Waitlist: " . $waitlist;
 			}
-			$subject =  "Attendee list changed for your ride scheduled for: " . $dow . ' ' . $rpod->get_ride_date(true) . ' ' . $start_time;
-		$rc = new BikeClubRole(13256);
-			$rc_user = $rc->get_member();
-    		$fromname = $rc_user['display_name'];
-    		// $from = 'ridecoordinator@email.mafw.org';
-    		$from = 'ridecoordinator@mafw.org';
-	    	$headers = array('Content-Type: text/html; charset=UTF-8', 'From: ' . $fromname . ' <' . $from . '>');
-        	wp_mail($rl_email, $subject, $msg, $headers);
+			$subject =  "Attendee list changed for your ride scheduled for: " . $dow . ' ' . $rpod->display('ride_date') . ' ' . $start_time;
+		$rc = pods('role', 13256);
+			$rc_user = $rc->field('member');
+		$fromname = $rc_user['display_name'];
+		// $from = 'ridecoordinator@email.mafw.org';
+		$from = 'ridecoordinator@mafw.org';
+		$headers = array('Content-Type: text/html; charset=UTF-8', 'From: ' . $fromname . ' <' . $from . '>');
+		wp_mail($rl_email, $subject, $msg, $headers);
 		}
 		if ( $send_text ) {
 			$cell_phone = strip_tags(xprofile_get_field_data('Mobile Phone', $rlid));
 			if (!empty($cell_phone)) {
 				$cell_phones =  [ bk_fix_num($cell_phone) ];
-				$txtmsg .=  $dow . ' ' . $rpod->get_ride_date(true) . ' ' . $start_time;
+				$txtmsg .=  $dow . ' ' . $rpod->display('ride_date') . ' ' . $start_time;
 				if (function_exists('wp_sms_send')) {
-                	wp_sms_send($cell_phones, $txtmsg, false);
+			wp_sms_send($cell_phones, $txtmsg, false);
 				}
 			}
 		}
 	}
 }
 
-function bikeride_mystatus_function() { 
+function bikeride_mystatus_function() {
     if (!class_exists('Pods'))
         return;
     //checking the nonce. will die if it is no good.
@@ -335,11 +335,11 @@ function bikeride_mystatus_function() {
 	$my_ra_status = "No";
     if ($rideid != 0) {
         $current_userid = get_current_user_id();
-	    $upod = new BikeClubUser($current_userid);
-        $rpod = new BikeClubRide($rideid);
-		$rl = $rpod->get_ride_leader();
-	    $attendees = get_post_meta($rpod->get_ID(), '_pods_attendees', true);
-		$limit = $rpod->get_maximum_signups();
+	    $upod = pods('user', $current_userid);
+        $rpod = pods('ride', $rideid);
+		$rl = $rpod->field('ride_leader');
+	    $attendees = get_post_meta($rpod->field('ID'), '_pods_attendees', true);
+		$limit = $rpod->field('maximum_signups');
 		if (empty($limit))
 		    $limit = 0;
 		if (array_key_exists('car_license', $_POST)) {
@@ -364,9 +364,9 @@ function bikeride_mystatus_function() {
 		else
             $cell_phone = "";
         $found = 0;
-        $user = new BikeClubUser($current_userid);
+        $user = pods('user', $current_userid);
         $data = array(
-                    'title' => $rideid . ' - ' . $user->get_display_name(),
+                    'title' => $rideid . ' - ' . $user->field('display_name'),
                     'ride_attendee_status' => $status,
                     'car_license' => $car_license,
                     'emergency_phone' => $emergency_phone,
@@ -394,43 +394,43 @@ function bikeride_mystatus_function() {
 				else
 				    continue;
 				$is_rl = ($rl['ID'] == $userid);
-                $apod = new BikeClubRideAttendee($attendeeid);
-				$ra_status = $apod->get_ride_attendee_status();
+                $apod = pods('ride-attendee', $attendeeid);
+				$ra_status = $apod->field('ride_attendee_status');
                 if ($found == 0 && $current_userid == $userid) {
                     $found = 1;
 					$mypod = $apod;
 					$aid = $attendeeid;
 					if (empty($mywlnum))
 					    $mywlnum = 0;
-				    $mywlnum = $apod->get_wait_list_number();
+				    $mywlnum = $apod->field('wait_list_number');
 					$my_ra_status = $ra_status;
-                    if ($apod->get_car_license() != $car_license) {
+                    if ($apod->field('car_license') != $car_license) {
 						if (empty($car_license)) {
 							if ($ra_status == "Yes")
 							    $status = "Yes";
 						    continue;
 						}
-                        $apod->set_car_license($car_license);
+                        $apod->save('car_license', $car_license);
 					}
-                    if ($apod->get_emergency_phone() != $emergency_phone) {
+                    if ($apod->field('emergency_phone') != $emergency_phone) {
 						if (empty($emergency_phone)) {
 							if ($ra_status == "Yes")
 							    $status = "Yes";
 						    continue;
 						}
-                        $apod->set_emergency_phone($emergency_phone);
+                        $apod->save('emergency_phone', $emergency_phone);
 					}
-                    if ($apod->get_cell_phone() != $cell_phone) {
+                    if ($apod->field('cell_phone') != $cell_phone) {
 						if (empty($cell_phone)) {
 							if ($ra_status == "Yes")
 							    $status = "Yes";
 						    continue;
 						}
-                        $apod->set_cell_phone($cell_phone);
+                        $apod->save('cell_phone', $cell_phone);
 					}
                 }
 				if ($ra_status != "No") {
-				    $wlnum = $apod->get_wait_list_number();
+				    $wlnum = $apod->field('wait_list_number');
 					if (empty($wlnum))
 					    $wlnum = 0;
 					if ($wlnum == 0) {
@@ -452,14 +452,14 @@ function bikeride_mystatus_function() {
 		$set_waitlist = false;
         $remain = $limit > 0 ? $limit - $ridercount : 0;
         if ($found == 0 && $status != "No") {
-            $pod = new BikeClubRideAttendee();
+            $pod = pods('ride-attendee');
             $aid = $pod->add($data);
             if (!empty($aid) && is_int($aid) && $aid > 0)
 	            update_post_meta($aid, "_members_access_role", 'active');
-            $rpod->add_to('attendees', $aid); 
-			$apod = new BikeClubRideAttendee($aid);
+            $rpod->add_to('attendees', $aid);
+			$apod = pods('ride-attendee', $aid);
 			$apod->add_to('rider', $current_userid);
-	        $upod->add_to('rides', $aid); 
+	        $upod->add_to('rides', $aid);
 			$my_ra_status = "No";
 			$mypod = $apod;
 			$mywlnum = 0;
@@ -468,11 +468,11 @@ function bikeride_mystatus_function() {
 		    if ($remain <= 0 && !$is_rl) {
 				if ($status != "No") {
 					if ($my_ra_status == "No")
-		                $mypod->set_wait_list_number(++$max_wlnum);
+		                $mypod->save('wait_list_number', ++$max_wlnum);
 						$mywlnum = $max_wlnum;
 				}
 			    else {
-		            $mypod->set_wait_list_number(0);
+		            $mypod->save('wait_list_number', 0);
 		            if (!empty($wlapod) && $limit > 0 && $limit == $ridercount && $mywlnum == 0 && $my_ra_status != "No")
 						bk_move_from_waitlist($rpod, $wlapod);
 						$mywlnum = 0;
@@ -480,7 +480,7 @@ function bikeride_mystatus_function() {
 		    }
 			$is_rl = ($rl['ID'] == $current_userid);
 			if ($status != "No")  {
-                $mypod->set_ride_attendee_status($status);
+                $mypod->save('ride_attendee_status', $status);
 				if ($remain > 0 && !$is_rl) {
 				    if ($my_ra_status == "No" && $mywlnum == 0) {
 				        $ridercount++;
@@ -494,10 +494,10 @@ function bikeride_mystatus_function() {
 				    $ridercount--;
                     $remain = $limit > 0 ? $limit - $ridercount : 0;
 				}
-			    $aid = $mypod->get_ID();
+			    $aid = $mypod->field('ID');
 				$upod->remove_from('rides', $aid);
-                $apod = new BikeClubRideAttendee($aid);
-                $apod->set_ride_attendee_status("No");
+                $apod = pods('ride-attendee', $aid);
+                $apod->save('ride_attendee_status', "No");
 			}
 	    }
     }
@@ -516,7 +516,7 @@ function bikeride_mystatus_function() {
 	                      );
 
     bk_clear_cache();
-    echo json_encode( $ajax_response );  //always echo an array encoded in json 
+    echo json_encode( $ajax_response );  //always echo an array encoded in json
     die();
 }
 add_action( 'wp_mystatus_function', 'bikeride_mystatus_function' );
@@ -675,31 +675,31 @@ function bk_rides_i_rode_table()
         $arr = preg_split('/ - /', $post_title);
         if ($arr && is_array($arr) && count($arr) > 0 ) {
 			$rideid = $arr[0];
-            $rpod = new BikeClubRide($rideid);
+            $rpod = pods('ride', $rideid);
         }
-        if ($rpod && $rpod->get_ride_status() == 4 ) {
-            $attendees = get_post_meta($rpod->get_ID(), '_pods_attendees', true);
+        if ($rpod && $rpod->field('ride-status') == 4 ) {
+            $attendees = get_post_meta($rpod->field('ID'), '_pods_attendees', true);
             if (!empty($attendees)) {
                 $aid = bk_find_attendee($attendees, $post_id);
                 if ($aid != false) {
                     $tz = new DateTimeZone(wp_timezone_string());
-                    $ride_date = $rpod->get_ride_date(true);
-                    $start_time = $rpod->get_time(true);
+                    $ride_date = $rpod->display('ride_date');
+                    $start_time = $rpod->display('time');
                     $ridestart = new DateTime($ride_date . ' ' . $start_time, $tz);
 		            $ptpage = '<a href="#" class="pace-terrain">';
-		            $pace = $ptpage . $rpod->get_pace(true) . '</a>';
-		            $rl = $rpod->get_ride_leader();
-		            $rlpod = new BikeClubUser($rl['ID']);
-		            $rlname = $rlpod->get_display_name();
+		            $pace = $ptpage . $rpod->display('pace') . '</a>';
+		            $rl = $rpod->field('ride_leader');
+		            $rlpod = pods("user", $rl['ID']);
+		            $rlname = $rlpod->field('display_name');
 		    $ride_leader = '<a href="' . get_site_url() . '/members/' . $rlname . '/profile/">' . $rlname . '</a>';
-                    $tourfield = $rpod->get_tour();
-                    $tpod = new BikeClubTour($tourfield['ID']);
-				$miles = intval($tpod->get_miles());
-				$climb = intval($tpod->get_climb());
-                    $start = $tpod->get_start_point();
+                    $tourfield = $rpod->field('tour');
+                    $tpod = pods('tour', $tourfield['ID']);
+				$miles = intval($tpod->field('miles'));
+				$climb = intval($tpod->field('climb'));
+                    $start = $tpod->field('start_point');
                     $url = get_site_url() . '/start_point/' . $start['post_name'] . '/';
                     $startloc = '<a href="' . esc_url($url) . '">' . $start['post_title'] . '</a>';
-                    $tour = '<a href="' . get_site_url() . '/ride/' . $rideid . '">' . $tpod->get_tour_number() . ' - ' . $tpod->get_post_title() . '</a>';
+                    $tour = '<a href="' . get_site_url() . '/ride/' . $rideid . '">' . $tpod->field('tour_number') . ' - ' . $tpod->field('post_title') . '</a>';
                     $ride_entry = [ 'ride_date' => $ride_date, 'start_time' => $start_time, 'ridestart' => $ridestart, 'pace' => $pace, 'miles' => $miles, 'climb' => $climb, 'rideleader' => $ride_leader, 'startloc' => $startloc, 'detail' => $tour ];
                     // error_log(print_r($ride_entry, true));
                     $ridelist[] = $ride_entry;
@@ -759,10 +759,10 @@ function bk_user_attended_rides($user)
         $arr = preg_split('/ - /', $post_title);
         if ($arr && is_array($arr) && count($arr) > 0 ) {
 			$rideid = $arr[0];
-            $rpod = new BikeClubRide($rideid);
-		if ($rpod && $rpod->get_ride_status() == 4 ) {
+            $rpod = pods('ride', $rideid);
+		if ($rpod && $rpod->field('ride-status') == 4 ) {
 				$ride_count++;
-        	}
+		}
 		}
     }
     return $ride_count;
@@ -924,8 +924,8 @@ function bk_tour_description($tpod)
 {
     // error_log("in bk_tour_description");
     $desc = "";
-    $tour_description = $tpod->get_tour_description();
-    $vimeo = $tpod->get_vimeo();
+    $tour_description = $tpod->field('tour_description');
+    $vimeo = $tpod->field('vimeo');
     if (!empty($tour_description))
         $desc .= $tour_description;
     if (!empty($vimeo) && (current_user_can('active') || current_user_can('manage_options'))) {
@@ -939,7 +939,7 @@ function bike_new_tourno()
     if (!class_exists('Pods')) {
         return;
 	}
-    $pod = new BikeClubTour();
+    $pod = pods('tour');
     $params = array(
         'orderby' => 'CAST(tour_number.meta_value AS unsigned) DESC',
         'limit' => 1
@@ -947,7 +947,7 @@ function bike_new_tourno()
     $pod->find($params);
     if ($pod->total() > 0) {
        $pod->fetch();
-       $tourno = $pod->get_tour_number() + 1;
+       $tourno = $pod->field('tour_number') + 1;
     }
     else
        $tourno = 1;
@@ -959,7 +959,7 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
         return;
       global $wp;
       $current_slug = add_query_arg( array(), $wp->request );
-      $my_scheduled_rides = ($current_slug == "my-scheduled-rides") ? 1 : 0; 
+      $my_scheduled_rides = ($current_slug == "my-scheduled-rides") ? 1 : 0;
 	  $tz = new DateTimeZone(wp_timezone_string());
 	  if (empty($role) || $role == 'member')
 	      if (current_user_can('active'))
@@ -1005,7 +1005,7 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
 		  $end_date_obj = new DateTime($start_date . ' +1 day', $tz);
       else
 		  $end_date_obj = new DateTime($end_date, $tz);
-      $end_date = $end_date_obj->format("Y-m-d");	
+      $end_date = $end_date_obj->format("Y-m-d");
 	  $start_year = $curdate_obj->format("Y");
 	  $end_year = $end_date_obj->format("Y");
       global $post;
@@ -1043,7 +1043,7 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
 			if ($small != 1 && ($role == "guest" || $role != 'ride_leader' ||
 			        $scheduled != 1))
 			    $result .= '<th>Leader</th>';
-			if ($role == 'ride_leader' && $small == 1 && $scheduled == 0 && 
+			if ($role == 'ride_leader' && $small == 1 && $scheduled == 0 &&
 			        $show_date == 1 && $statusfirst == 1)
                 $result .= '<th>Tour/Riders</th>';
 			else
@@ -1094,7 +1094,7 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
       }
       if ($oldschedule != 0 || ($role != 'ride_coordinator' && $scheduled != 1))
           $filter .= ' AND ride-status.meta_value != 3 ';
-      $rpod = new BikeClubRide();
+      $rpod = pods('ride');
       $params = array(
             'orderby' => 'CAST(ride_date.meta_value AS date), CAST(time.meta_value AS time), pace.index.meta_value',
 	         'limit' => -1,
@@ -1105,7 +1105,7 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
         $curdate_obj = new DateTime("now", $tz);
       while( $rpod->fetch()) {
         $weekchange = 0;
-	    $date_str = $rpod->get_ride_date(true) . ' ' . $rpod->get_time(true);
+	    $date_str = $rpod->display('ride_date') . ' ' . $rpod->display('time');
 		$date_obj = new DateTime($date_str, $tz);
 		$ride_date_past = 0;
 		if ($date_obj->format('Y') < $curdate_obj->format('Y'))
@@ -1122,7 +1122,7 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
 				}
 			}
 		}
- 		$day = $date_obj->format("D");
+		$day = $date_obj->format("D");
 		$date = $date_obj->format('Y-m-d');
 		if (!empty($prevdate) && $date != $prevdate &&
 		         ($role != "ride_leader" || $small != 1)) {
@@ -1142,14 +1142,14 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
 		    $ridedate = $date_obj->format('m/d/y');
 		else
 		    $ridedate = $date_obj->format('m/d');
-		// $time = $oldschedule == 0 ? $rpod->get_time(true) : $rpod->get_time();
-		$time = $rpod->get_time(true);
-		$tourfield = $rpod->get_tour();
+		// $time = $oldschedule == 0 ? $rpod->display('time') : $rpod->field('time');
+		$time = $rpod->display('time');
+		$tourfield = $rpod->field('tour');
 		if ( $tourfield == false )
 			continue;
         $tourid = $tourfield['ID'];
-        $rideid = $rpod->get_ID();
-		$tpod = new BikeClubTour($tourid);
+        $rideid = $rpod->field('ID');
+		$tpod = pods('tour', $tourid);
 	    // $min_time = new DateTime('now + 2 hours', $tz);
 	    $min_time = new DateTime('now', $tz);
 		$start_time = new DateTime($date . " " . $time, $tz);
@@ -1159,21 +1159,21 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
 		$waitlist = array();
 	    $count = bk_get_signup_list($rpod, $signups, $waitlist, $aid);
         $remaining = 0;
-        if ($start_time >= $min_time && $rpod->get_ride_status() != 2) {
-            $max_signups = $rpod->get_maximum_signups();
+        if ($start_time >= $min_time && $rpod->field('ride-status') != 2) {
+            $max_signups = $rpod->field('maximum_signups');
             if (!empty($max_signups)) {
                 $remaining = $max_signups - $count;
 				if ($remaining < 0)
 				    $remaining = 0;
             }
         }
-		$rl = $rpod->get_ride_leader();
+		$rl = $rpod->field('ride_leader');
 		if ( $rl !== false ) {
 		    $rlid = $rl['ID'];
-		    $rlpod = new BikeClubUser($rl['ID']);
-            $rl_email = $rlpod->get_user_email();
-		    $rluname = $rlpod->get_user_nicename();
-		    $rlname = $rlpod->get_display_name();
+		    $rlpod = pods("user", $rl['ID']);
+            $rl_email = $rlpod->field('user_email');
+		    $rluname = $rlpod->field('user_nicename');
+		    $rlname = $rlpod->field('display_name');
 		}
 		else {
 			$rlid = 0;
@@ -1185,28 +1185,28 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
 		if ( $rlid == PROPOSED_RIDE_LEADER_USERID && !current_user_can('ridecoordinator') && !current_user_can('rideleader') ) {
 			continue;
 		}
-        $hazards = empty($tpod->get_road_closures()) ? "" : "*";
+        $hazards = empty($tpod->field('road_closures')) ? "" : "*";
         if ($role != "guest") {
             if ($remaining < 40 && $role != 'ride_coordinator') {
-		        $tour = '<a href="' . get_site_url() . '/ride/' . $rideid . '">' . $tpod->get_tour_number() . ' - ' . $tpod->get_post_title() . $hazards . '(' . $remaining . ')</a>';
+		        $tour = '<a href="' . get_site_url() . '/ride/' . $rideid . '">' . $tpod->field('tour_number') . ' - ' . $tpod->field('post_title') . $hazards . '(' . $remaining . ')</a>';
             }
             else {
-		        $tour = '<a href="' . get_site_url() . '/ride/' . $rideid . '">' . $tpod->get_tour_number() . ' - ' . $tpod->get_post_title() . $hazards . '</a>';
+		        $tour = '<a href="' . get_site_url() . '/ride/' . $rideid . '">' . $tpod->field('tour_number') . ' - ' . $tpod->field('post_title') . $hazards . '</a>';
             }
         }
         else {
-            if ($rpod->get_ride_status() != 2 && $ride_date_past != 1 && $remaining > 0)
-		        $tour = '<a href="' . get_site_url() . '/guest-ride-signup/?rlid=' . $rlid . '&rideid=' . $rideid . '">' . $tpod->get_tour_number() . ' - ' . $tpod->get_post_title() . '</a>';
+            if ($rpod->field('ride-status') != 2 && $ride_date_past != 1 && $remaining > 0)
+		        $tour = '<a href="' . get_site_url() . '/guest-ride-signup/?rlid=' . $rlid . '&rideid=' . $rideid . '">' . $tpod->field('tour_number') . ' - ' . $tpod->field('post_title') . '</a>';
             else
-		        $tour = $tpod->get_tour_number() . ' - ' . $tpod->get_post_title();
+		        $tour = $tpod->field('tour_number') . ' - ' . $tpod->field('post_title');
         }
         if ($scheduled == 2 || $oldschedule != 0) {
-            if (/* $rpod->get_ride_canceled() == 1 || */ $rpod->get_ride_status() == 2)
+            if (/* $rpod->field('ride_canceled') == 1 || */ $rpod->field('ride-status') == 2)
                 $tour .= ' <b><font color="red">**CANCELED**</font></b>';
-            else if ($rpod->get_ride_change() == 1 && $ride_date_past != 1)
+            else if ($rpod->field('ride_change') == 1 && $ride_date_past != 1)
                 $tour .= '<br /><b><font color="red">**Note Changes - Click + for details**</font></b>';
         }
-		// if ($tpod->get_tour_type() == 0)
+		// if ($tpod->field('tour_type') == 0)
 			// $ptpage = "pace-terrain-information-road-day-evening";
 		// else
 			// $ptpage = "pace-terrain-info-path-trail-rides";
@@ -1214,23 +1214,23 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
 		// $ptpage = "%23elementor-action%3Aaction%3Dpopup%3Aopen%26settings%3DeyJpZCI6IjMzOTM2IiwidG9nZ2xlIjpmYWxzZX0%3D";
 		$ptpage = '<a href="#" class="pace-terrain">';
 		$tour_description = bk_tour_description($tpod);
-		$tour_comments = $tpod->get_tour_comments();
+		$tour_comments = $tpod->field('tour_comments');
 		if (!empty($tour_comments)) {
 		    $tour_comments = str_replace(["<li>", "</li>", "<p>", "</p>","<br>"], ["", "<br>", "", "", ""], $tour_comments);
 		}
-				// $pace = '<a href="' . $ptpage . '">' . $rpod->get_pace(true) . '</a>';
-				$pace = $ptpage . $rpod->get_pace(true) . '</a>';
-				if ($rpod->get_ride_canceled() == 'Yes') {
-					$rideid = $rpod->get_ID();
-					$rpod->set_ride_status(2);
+				// $pace = '<a href="' . $ptpage . '">' . $rpod->display('pace') . '</a>';
+				$pace = $ptpage . $rpod->display('pace') . '</a>';
+				if ($rpod->field('ride_canceled') == 'Yes') {
+					$rideid = $rpod->field('ID');
+					$rpod->save('ride-status', 2);
 				}
-				$status = $rpod->get_ride_status(true);
-				$ride_comments = $rpod->get_ride_comments();
+				$status = $rpod->display('ride-status');
+				$ride_comments = $rpod->field('ride_comments');
 				if ($role != "guest")
 					$ride_leader = '<a href="' . get_site_url() . '/members/' . $rluname . '/profile/">' . $rlname . '</a>';
         else
 		    $ride_leader = $rlname;
-		$terrain_field = $tpod->get_tour_terrain();
+		$terrain_field = $tpod->field('tour-terrain');
 		if (!empty($terrain_field) && !empty($terrain_field['post_title'])) {
 		    $terrain_name = $terrain_field['post_title'];
             // $terrain = '<a href="' . $ptpage . '">' . $terrain_name . '</a>';
@@ -1238,7 +1238,7 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
 		}
 		else
 			$terrain = "";
-        $start = $tpod->get_start_point();
+        $start = $tpod->field('start_point');
 		if ($start) {
             $url = get_site_url() . '/start_point/' . $start['post_name'] . '/';
             $startloc = '<a href="' . esc_url($url) . '">' . $start['post_title'] . '</a>';
@@ -1246,12 +1246,12 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
 		else
 			$startloc = "";
 
-        $climb = intval($tpod->get_climb());
-        $miles = intval($tpod->get_miles());
-		$rider_count = $rpod->get_rider_count(true);
+        $climb = intval($tpod->field('climb'));
+        $miles = intval($tpod->field('miles'));
+		$rider_count = $rpod->display('rider_count');
 		$average_climb = $miles > 0 ? round($climb / $miles) : 0;
 	    $signup_list = implode(", ", $signups);
-        $cue = bike_cue_links($tpod->get_cue_sheet_number(), $tpod->get_tour_number(), $tpod->get_tour_map() );
+        $cue = bike_cue_links($tpod->field('cue_sheet_number'), $tpod->field('tour_number'), $tpod->field('tour_map') );
 		// $url = '/edit-ride?rideid=' . $rideid;
         $url = '/ride/' . $rideid . '/riderole=';
         $bk_form_nonce = wp_nonce_field('bk_signinsheet_action', 'bk_signinsheet_nonce', true, false);
@@ -1309,14 +1309,14 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
 		    <td>' . $time . '</td>';
           if ($small != 1 && $my_scheduled_rides == 0) {
 			  if ($sepcols == 0) {
-                $result .= 
-			        '<td>' . $pace . '/' . 
+                $result .=
+			        '<td>' . $pace . '/' .
 			        $terrain . '/' .
                     $miles . '/' .
                     $climb . '</td>';
 		      }
 			  else {
-                $result .= 
+                $result .=
 			        '<td>' . $pace . '</td>' .
 			        '<td>' . $terrain . '</td>' .
                     '<td>' . $miles . '</td>' .
@@ -1382,7 +1382,7 @@ function bk_get_signup_id_list($rpod)
     $signups = array();
 	if (empty($rpod) || !is_object($rpod))
 		return $signups;
-	$attendees = get_post_meta($rpod->get_ID(), '_pods_attendees', true);
+	$attendees = get_post_meta($rpod->field('ID'), '_pods_attendees', true);
 	if (!empty($attendees)) {
 		foreach ($attendees as $attendee) {
             $attendeeid = $attendee;
@@ -1406,13 +1406,13 @@ function bk_get_signup_list($rpod, &$signups, &$waitlist, &$curuser_aid)
 		return 0;
 	}
     else {
-        $ride_status = $rpod->get_ride_status();
+        $ride_status = $rpod->field('ride-status');
         if ($ride_status != 0 && $ride_status != 4)
 		    return 0;
     }
 	$count = 1;
-	$attendees = get_post_meta($rpod->get_ID(), '_pods_attendees', true);
-    $rl = $rpod->get_ride_leader();
+	$attendees = get_post_meta($rpod->field('ID'), '_pods_attendees', true);
+    $rl = $rpod->field('ride_leader');
 	if (!empty($attendees)) {
 		$now = new DateTime();
         $six_months_ago = $now->modify('-6 months');
@@ -1436,7 +1436,7 @@ function bk_get_signup_list($rpod, &$signups, &$waitlist, &$curuser_aid)
 			$wait_listed = get_post_meta($attendeeid, 'wait_list_number', true);
 			if (empty($wait_listed))
 			    $wait_listed = 0;
-			// if ($rpod->get_ID() == 152302)
+			// if ($rpod->field('ID') == 152302)
 			    // error_log("aid:" . $attendeeid . " " . $user->ID . ":" . $user->user_nicename . ": status:" . $status);
 			if ($status != "No") {
 			    $userpace = xprofile_get_field_data("I normally ride at", $user->ID, 'array');
@@ -1466,7 +1466,7 @@ function bk_get_signup_list($rpod, &$signups, &$waitlist, &$curuser_aid)
 			}
 		}
 	}
-    $guests = $rpod->get_guests();
+    $guests = $rpod->field('guests');
 	if (!empty($guests)) {
 	    foreach ($guests as $guest) {
             $post = get_post($guest['ID']);
@@ -1494,15 +1494,15 @@ add_shortcode('bk_add_tours_to_hazards', 'bk_add_tours_to_hazards');
 function bk_add_tours_to_hazards()
 {
     $ret = "";
-    $pod = new BikeClubRoadClosuresWarning(233501 );
+    $pod = pods('road_closureswarning', 233501 );
     $newtours = array( 50, 78, 80, 635, 678, 697, 701, 798, 868, 873, 906, 1025, 1052, 1221, 1226, 1470 );
 
     foreach ($newtours as $tour) {
         $params = array( 'where' => 'tour_number.meta_value = ' . $tour );
-        $tpods = new BikeClubTour($params);
+        $tpods = pods('tour', $params);
         if (0 < $tpods->total()) {
             if ($tpods->fetch()) {
-                $tid = $tpods->get_ID();
+                $tid = $tpods->field('ID');
                 $pod->add_to('tour', $tid);
                 $ret .= "Added tour " . $tour . " tid:" . $tid . '<br />';
             }
@@ -1533,20 +1533,20 @@ function bk_food_stops_table()
      $ret = "";
      $mintime_gap = get_option('club-settings_min_time_between_rides') - 1;
 	 $params = array( 'limit' => -1);
-	 $pod = new BikeClubFoodStop($params);
+	 $pod = pods('food_stops', $params);
 	 $foodstops = array();
 	 while ($pod->fetch()) {
          $foodstops[] = array(
-			    'name' => $pod->get_post_title(),
-		        'mapurl' => $pod->get_map(),
-                                'post_name' => $pod->get_post_name(),
-				'town' => $pod->get_town(),
-				'open' => $pod->get_open(),
-				'hours' => $pod->get_hours(),
-				'notes' => $pod->get_notes(),
-				'phone' => $pod->get_phone(),
-				'indoor_seating' => $pod->get_indoor_seating(),
-				'address' => $pod->get_address()
+			    'name' => $pod->field('post_title'),
+		        'mapurl' => $pod->field('map'),
+                                'post_name' => $pod->field('post_name'),
+				'town' => $pod->field('town'),
+				'open' => $pod->field('open'),
+				'hours' => $pod->field('hours'),
+				'notes' => $pod->field('notes'),
+				'phone' => $pod->field('phone'),
+				'indoor_seating' => $pod->field('indoor_seating'),
+				'address' => $pod->field('address')
               );
 	 }
 	 usort($foodstops, function($a, $b) {
@@ -1614,22 +1614,22 @@ function bk_schedule_blocks()
     if ($query->have_posts()) {
         while ($query->have_posts()) {
             $query->the_post();
-         	$post_id = get_the_ID();
-	        $pod = new BikeClubLocationDateBlock($post_id);
+		$post_id = get_the_ID();
+	        $pod = pods('locationdateblock', $post_id);
 			if ($can_edit) {
-				$link = get_site_url() . '/locationdateblock/' . $pod->get_post_name() . '/?blockedit=Edit';
-			    $title = '<a href="' . $link . '">' . $pod->get_post_title() . '</a>';
+				$link = get_site_url() . '/locationdateblock/' . $pod->field('post_name') . '/?blockedit=Edit';
+			    $title = '<a href="' . $link . '">' . $pod->field('post_title') . '</a>';
 			}
 			else {
-			    $title = $pod->get_post_title();
+			    $title = $pod->field('post_title');
 			}
 		    $blocked_entries[] = [
 			    'title' => $title,
-				'start' => $pod->get_start_date(),
-				'end' => $pod->get_end_date(),
-				'Days of Week' => $pod->get_days_of_week(),
-				'location' => $pod->get_start_location(true),
-			    'message' => strip_tags($pod->get_post_content())
+				'start' => $pod->field("start_date"),
+				'end' => $pod->field("end_date"),
+				'Days of Week' => $pod->field("days_of_week"),
+				'location' => $pod->display("start_location"),
+			    'message' => strip_tags($pod->field("post_content"))
 			];
 		}
         $ret .= '<table class="display blocked-dates-table" style="width:100%">
@@ -1644,24 +1644,24 @@ function bk_schedule_blocks()
             </tr>
           </thead>
           <tbody>';
-     	foreach ($blocked_entries as $entry) {
+	foreach ($blocked_entries as $entry) {
 			$title = $entry['title'];
-        	$start = $entry['start'];
-        	$end = $entry['end'];
-        	$dow = $entry['Days of Week'];
-        	$location = $entry['location'];
-        	$message = $entry['message'];
-        	$ret .= '<tr>';
-        	$ret .= '<td>' . $title . '</td>';
-        	$ret .= '<td>' . $start . '</td>';
-        	$ret .= '<td>' . $end . '</td>';
-        	$ret .= '<td>' . $dow . '</td>';
-        	$ret .= '<td>' . $location . '</td>';
-        	$ret .= '<td>' . $message . '</td>';
-        	$ret .= '</tr>';
-    	}
-     	$ret .= '</tbody></table>';
-    	return $ret;
+		$start = $entry['start'];
+		$end = $entry['end'];
+		$dow = $entry['Days of Week'];
+		$location = $entry['location'];
+		$message = $entry['message'];
+		$ret .= '<tr>';
+		$ret .= '<td>' . $title . '</td>';
+		$ret .= '<td>' . $start . '</td>';
+		$ret .= '<td>' . $end . '</td>';
+		$ret .= '<td>' . $dow . '</td>';
+		$ret .= '<td>' . $location . '</td>';
+		$ret .= '<td>' . $message . '</td>';
+		$ret .= '</tr>';
+	}
+	$ret .= '</tbody></table>';
+	return $ret;
 	}
 	else {
 	    return "No entries";
@@ -1673,23 +1673,23 @@ function bk_road_hazards_table()
 	 $tz = new DateTimeZone(wp_timezone_string());
      $dt = new DateTime('1970-01-01 00:00:00', $tz);
 	 $params = array( 'limit' => -1 );
-	 $pod = new BikeClubRoadClosuresWarning($params);
+	 $pod = pods('road_closureswarning', $params);
 	 $hazards = array();
 	 while ($pod->fetch()) {
-		 $end = $pod->get_end_date();
+		 $end = $pod->field('end_date');
 		 if (empty($end) || $end == "0000-00-00")
 		     $end = "";
-		 $tours = $pod->get_tour();
+		 $tours = $pod->field('tour');
 		 // error_log(print_r($tours, true));
-		 $description = $pod->get_description();
-		 $comments = $pod->get_closure_comments();
-		 $location = $pod->get_road_closure_location();
-		 $start = $pod->get_start_date();
+		 $description = $pod->field('description');
+		 $comments = $pod->field('closure_comments');
+		 $location = $pod->field('road_closure_location');
+		 $start = $pod->field('start_date');
          if ( !empty( $tours ) && is_array( $tours ) )
 		   foreach ($tours as $tour) {
 			  $tid = $tour['ID'];
-			  $tpod = new BikeClubTour($tid);
-			  $tourno = $tpod->get_tour_number();
+			  $tpod = pods('tour', $tid);
+			  $tourno = $tpod->field('tour_number');
               $link = '<a href="' . get_site_url() . '/tour/?p=' . $tid . '">' . $tourno . '</a>';
 		      $hazards[] = array(
 			    'tour' => $link,
@@ -1699,7 +1699,7 @@ function bk_road_hazards_table()
 				'end' => $end,
 				'location' => $location);
 		   }
-		 $modified = $pod->get_post_modified();
+		 $modified = $pod->field('post_modified');
 		 $postdt = new DateTime($modified, $tz);
 		 if ($postdt > $dt)
 		     $dt = $postdt;
@@ -1750,8 +1750,8 @@ function bk_road_hazards_table()
 
 function road_hazards($tourid)
 {
-     $tpod = new BikeClubTour($tourid);
-     $hazards = $tpod->get_road_closures();
+     $tpod = pods('tour', $tourid);
+     $hazards = $tpod->field('road_closures');
      if (empty($hazards) || !is_array($hazards))
          return "";
      $ret = '<table class="display road-hazards-table" style="width:100%">
@@ -1807,14 +1807,14 @@ function bk_user_emails($email, $userid)
 add_filter( 'gform_pre_render_16', 'add_readonly_script' );
 function add_readonly_script( $form ) {
     ?>
- 
+
     <script type="text/javascript">
         jQuery(document).ready(function(){
             /* apply only to input or select with a class of gf_readonly */
             jQuery(".disabled select").attr("disabled","disabled");
         });
     </script>
- 
+
     <?php
     return $form;
 }
@@ -1836,12 +1836,12 @@ function bk_guest_validation($validation_result)
 			else {
                 $enddate = pmpro_get_expiration_date( $user->ID );
 				if ( $enddate !== null ) {
-	    		    $tz = new DateTimeZone(wp_timezone_string());
-        		    $yearago = new DateTime(null, $tz);
+			    $tz = new DateTimeZone(wp_timezone_string());
+			    $yearago = new DateTime(null, $tz);
 					$yearago->modify('-1 year');
 					if($enddate > $yearago) {
 						// don't allow recently expired members to sign up as a guest
-                	    $msg = "Guest signup is just for new members. Former club members need to log-in and then renew your membership in order to sign up for a ride.";
+			    $msg = "Guest signup is just for new members. Former club members need to log-in and then renew your membership in order to sign up for a ride.";
 					}
 				}
 			}
@@ -1928,24 +1928,24 @@ function bk_days_until_membership_expires() {
 
 /*
 	Shortcode to show a member's expiration date.
-	
+
 	Add this code to your active theme's functions.php or a custom plugin.
-	
+
 	Then add the shortcode [pmpro_expiration_date] where you want the current user's
 	expiration date to appear.
-	
+
 	If the user is logged out or doesn't have an expiration date, then --- is shown.
 */
 function pmpro_expiration_date_shortcode( $atts ) {
 	//make sure PMPro is active
 	if(!function_exists('pmpro_getMembershipLevelForUser'))
 		return;
-	
+
 	//get attributes
 	$a = shortcode_atts( array(
 	    'user' => '',
 	), $atts );
-	
+
 	//find user
 	if(!empty($a['user']) && is_numeric($a['user'])) {
 		$user_id = $a['user'];
@@ -1958,7 +1958,7 @@ function pmpro_expiration_date_shortcode( $atts ) {
 	} else {
 		$user_id = false;
 	}
-	
+
 	//no user ID? bail
 	if(!isset($user_id))
 		return;
@@ -1982,7 +1982,7 @@ add_shortcode('pmpro_expiration_date', 'pmpro_expiration_date_shortcode');
 function bike_pre_save_tour($pieces, $is_new_item) {
     if ($is_new_item) {
         $num = $pieces['fields']['tour_number']['value'];
-        $pod = new BikeClubTour();
+        $pod = pods('tour');
         $params = array(
             'where' => 'CAST(tour_number.meta_value AS unsigned) = ' .  $num
         );
@@ -2005,31 +2005,31 @@ function bike_add_tour( $form ) {
     return $form;
 }
 
-add_action( 'xprofile_updated_profile', 'bk_clear_cache' ); 
-add_action( 'pods_api_post_save_pod_item_road_closurewarning', 'bk_clear_cache' ); 
+add_action( 'xprofile_updated_profile', 'bk_clear_cache' );
+add_action( 'pods_api_post_save_pod_item_road_closurewarning', 'bk_clear_cache' );
 
-add_action( 'pods_api_post_save_pod_item_start_point', 'bk_clear_cache', 10, 3 ); 
+add_action( 'pods_api_post_save_pod_item_start_point', 'bk_clear_cache', 10, 3 );
 
-add_action( 'pods_api_post_save_pod_item_tour', 'bike_custom_pods_update_terms_on_save', 10, 3 ); 
+add_action( 'pods_api_post_save_pod_item_tour', 'bike_custom_pods_update_terms_on_save', 10, 3 );
 
-/** 
- * Update post terms on save for another associated taxonomy. 
- * 
- * @param array   $pieces      List of data. 
- * @param boolean $is_new_item Whether the item is new. 
- * @param int     $id          Item ID. 
- */ 
-function bike_custom_pods_update_terms_on_save( $pieces, $is_new_item, $id ) { 
-    remove_action( 'pods_api_post_save_pod_item_tour', 'bike_custom_pods_update_terms_on_save', 10, 3 ); 
+/**
+ * Update post terms on save for another associated taxonomy.
+ *
+ * @param array   $pieces      List of data.
+ * @param boolean $is_new_item Whether the item is new.
+ * @param int     $id          Item ID.
+ */
+function bike_custom_pods_update_terms_on_save( $pieces, $is_new_item, $id ) {
+    remove_action( 'pods_api_post_save_pod_item_tour', 'bike_custom_pods_update_terms_on_save', 10, 3 );
     global $wpdb;
-    $pod = new BikeClubTour($id);
-	$mapurl = $pod->get_tour_map();
+    $pod = pods('tour', $id);
+	$mapurl = $pod->field('tour_map');
 	if (!empty($mapurl) && strpos($mapurl, "http:") !== false)
-	    $pod->set_tour_map(str_replace("http:", "https:", $mapurl));
-    $cue = $pod->get_cue_sheet();
+	    $pod->save('tour_map', str_replace("http:", "https:", $mapurl));
+    $cue = $pod->field('cue_sheet');
     $cueid = $cue ? $cue['ID'] : 0;
-    $tourno = $pod->get_tour_number();
-    $cue_sheet_number = $pod->get_cue_sheet_number();
+    $tourno = $pod->field('tour_number');
+    $cue_sheet_number = $pod->field('cue_sheet_number');
 	if (empty($tourno) || $tourno == 0) {
         $query = 'SELECT meta_value FROM ' . $wpdb->prefix . 'postmeta WHERE meta_key = "tour_number" ORDER BY CAST(meta_value AS unsigned) DESC LIMIT 1';
         $results = $wpdb->get_results($query);
@@ -2039,7 +2039,7 @@ function bike_custom_pods_update_terms_on_save( $pieces, $is_new_item, $id ) {
 		}
 		else
 		    $tourno = 1;
-        $pod->set_tour_number($tourno);
+        $pod->save('tour_number', $tourno);
 	}
     if ($cueid > 0) {
         $filepath = get_post_meta($cueid, '_wp_attached_file', true);
@@ -2066,11 +2066,11 @@ function bike_custom_pods_update_terms_on_save( $pieces, $is_new_item, $id ) {
                 update_post_meta($cueid, '_wp_attached_file', $new_path);
 			    $guid = get_site_url() . '/wp-content/uploads/' . $new_path;
 			    $wpdb->update( $wpdb->posts, array('guid' => $guid, 'post_name' => $new_filename, 'post_title' => $new_filename), array('ID' => $cueid));
-	            $pod->set_cue_sheet_number($cue_sheet_number);
+	            $pod->save( 'cue_sheet_number', $cue_sheet_number);
             }
         }
     }
-    add_action( 'pods_api_post_save_pod_item_tour', 'bike_custom_pods_update_terms_on_save', 10, 3 ); 
+    add_action( 'pods_api_post_save_pod_item_tour', 'bike_custom_pods_update_terms_on_save', 10, 3 );
 	bk_clear_cache();
 }
 
@@ -2191,27 +2191,27 @@ function bike_get_nav_menu_items($items, $menu, $args)
 // add_filter( 'gform_entry_id_pre_save_lead_6', 'bike_update_entry_on_form_submission', 10, 2 );
 
 function bk_add_ride_leader_to_ride($rideid, $rpod) {
-	$pod = new BikeClubRideAttendee();
-   	$status = 'Yes';
-   	$current_userid = get_current_user_id();
-	$user = new BikeClubUser($current_userid);
-   	$emergency_phone = strip_tags(xprofile_get_field_data('Emergency Number', $current_userid));
-   	$car_license = xprofile_get_field_data('Vehicle License', $current_userid);
-   	$cell_phone = strip_tags(xprofile_get_field_data('Mobile Phone', $current_userid));
-   	$data = array(
-        'title' => $rideid . ' - ' . $user->get_display_name(),
+	$pod = pods('ride-attendee');
+	$status = 'Yes';
+	$current_userid = get_current_user_id();
+	$user = pods('user', $current_userid);
+	$emergency_phone = strip_tags(xprofile_get_field_data('Emergency Number', $current_userid));
+	$car_license = xprofile_get_field_data('Vehicle License', $current_userid);
+	$cell_phone = strip_tags(xprofile_get_field_data('Mobile Phone', $current_userid));
+	$data = array(
+        'title' => $rideid . ' - ' . $user->field('display_name'),
         'rider' => $current_userid,
         'ride_attendee_status' => $status,
         'car_license' => $car_license,
         'emergency_phone' => $emergency_phone,
         'cell_phone' => $cell_phone
     );
-   	$aid = $pod->add($data);
-   	$rpod->add_to('attendees', $aid);
-	$apod = new BikeClubRideAttendee($aid);
-	$upod = new BikeClubUser($current_userid);
+	$aid = $pod->add($data);
+	$rpod->add_to('attendees', $aid);
+	$apod = pods('ride-attendee', $aid);
+	$upod = pods('user', $current_userid);
     $upod->add_to('rides', $aid);
-    $apod->set_ride_attendee_status($status);
+    $apod->save('ride_attendee_status', $status);
     bk_remove_from_other_rides($current_userid, $rideid, 1);
     bk_clear_cache();
 }
@@ -2224,24 +2224,24 @@ add_action('gform_after_submission_32', 'bk_proposed_ride_signup');
 function bk_proposed_ride_signup($entry) {
     $rideid = rgar($entry, 'post_id');
 	if ($rideid > 0 && current_user_can('rideleader')) {
-        $rpod = new BikeClubRide($rideid);
-        $rpod->set_ride_status(0);
-        $rpod->set_email_sent(0);
+        $rpod = pods('ride', $rideid);
+        $rpod->save('ride-status', 0);
+        $rpod->save('email_sent', 0);
 		$userid = get_current_user_id();
 		$author = get_post_field('post_author', $rideid);
-	    $author_upod = new BikeClubUser($author);
-	    $leader_upod = new BikeClubUser($userid);
-		$rpod->set_ride_leader($userid);
+	    $author_upod = pods('user', $author);
+	    $leader_upod = pods('user', $userid);
+		$rpod->save('ride_leader', $userid);
 		$title = "ProposedRide-" . $rideid;
-    	$data = array(
+	$data = array(
                     'post_title' => $title,
                     'post_status' => "publish",
                     'submittor' => $author_upod,
                     'ride' => $rideid,
                     'ride_leader' => $leader_upod
                 );
-	$pod = new BikeClubChosenProposedRide();
-    	$postid = $pod->add($data);
+	$pod = pods('chosen_proposed_ride');
+	$postid = $pod->add($data);
 		update_post_meta($postid, 'ride', $rideid);
 		update_post_meta($postid, 'submittor', $author);
 		update_post_meta($postid, 'ride_leader', $userid);
@@ -2272,37 +2272,37 @@ function bk_add_previous_proposed_rides_records()
 	update_post_meta(232054, 'submittor', 4895);
 	update_post_meta(232054, 'ride_leader', 3128);
 	// $rideid = 229379;
-    // $pod = new BikeClubChosenProposedRide();
+    // $pod = pods('chosen_proposed_ride');
 	// $title = "ProposedRide-" . $rideid;
-   	// $data = array(
+	// $data = array(
                 // 'post_title' => $title,
                 // 'post_status' => "publish",
-                // 'submittor' => new BikeClubUser(4895),
+                // 'submittor' => pods('user', 4895),
                 // 'ride' => $rideid,
-                // 'ride_leader' => new BikeClubUser(3160)
+                // 'ride_leader' => pods('user', 3160)
             // );
-   	// $pod->add($data);
+	// $pod->add($data);
 	// $rideid = 229376;
 	// $title = "ProposedRide-" . $rideid;
 	// $data['post_title'] = $title;
 	// $data['ride'] = $rideid;
-	// $data['submittor'] = new BikeClubUser(4895);
-	// $data['ride_leader'] = new BikeClubUser(5522);
-   	// $pod->add($data);
+	// $data['submittor'] = pods('user', 4895);
+	// $data['ride_leader'] = pods('user', 5522);
+	// $pod->add($data);
 	// $rideid = 229185;
 	// $title = "ProposedRide-" . $rideid;
 	// $data['post_title'] = $title;
 	// $data['ride'] = $rideid;
-	// $data['submittor'] = new BikeClubUser(3240);
-	// $data['ride_leader'] = new BikeClubUser(3160);
-   	// $pod->add($data);
+	// $data['submittor'] = pods('user', 3240);
+	// $data['ride_leader'] = pods('user', 3160);
+	// $pod->add($data);
 	// $rideid = 229010;
 	////  $title = "ProposedRide-" . $rideid;
 	// $data['post_title'] = $title;
 	// $data['ride'] = $rideid;
-	// $data['submittor'] = new BikeClubUser(4895);
-	// $data['ride_leader'] = new BikeClubUser(3128);
-   	// $pod->add($data);
+	// $data['submittor'] = pods('user', 4895);
+	// $data['ride_leader'] = pods('user', 3128);
+	// $pod->add($data);
 	return "Done";
 }
 add_action('gform_after_submission_7', 'bk_add_ride');
@@ -2310,29 +2310,29 @@ add_action('gform_after_submission_7', 'bk_add_ride');
 function bk_add_ride($entry)
 {
     if ( !empty( $_GET['riderole'] ) && $_GET['riderole'] == 2 && current_user_can( "ridecoordinator" ) ) {
-    	$rideid = rgar($entry, 'post_id');
-	$rpod = new BikeClubRide($rideid);
+	$rideid = rgar($entry, 'post_id');
+	$rpod = pods('ride', $rideid);
 		$status = rgar($entry, 28);
-		$rl = $rpod->get_ride_leader();
+		$rl = $rpod->field('ride_leader');
 		if ($rl['ID'] == PROPOSED_RIDE_LEADER_USERID) {
-		    $rpod->set_email_sent(0);
+		    $rpod->save('email_sent', 0);
 		}
 		else if ($status == 1) {
-			$rpod->set_ride_leader(PROPOSED_RIDE_LEADER_USERID); // Proposed Ride
-		    $rpod->set_email_sent(0);
+			$rpod->save('ride_leader', PROPOSED_RIDE_LEADER_USERID); // Proposed Ride
+		    $rpod->save('email_sent', 0);
         }
 		// if ($rl['ID'] != PROPOSED_RIDE_LEADER_USERID && $rl['ID'] == get_current_user_id()) {
-			// $rpod->set_ride_leader(PROPOSED_RIDE_LEADER_USERID); // Proposed Ride
+			// $rpod->save('ride_leader', PROPOSED_RIDE_LEADER_USERID); // Proposed Ride
 		// }
 		// if ($status == 0) { // if Scheduled
 		    // $status = 1; // Proposed
 		// }
-        $rpod->set_ride_status($status);
+        $rpod->save('ride-status', $status);
 	}
     else if (!empty($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], "add-ride") && !empty($_GET['riderole']) && $_GET['riderole'] == 1 && current_user_can("rideleader")) {
-       	$rideid = rgar($entry, 'post_id');
-	$rpod = new BikeClubRide($rideid);
-        $rpod->set_ride_status(0);
+	$rideid = rgar($entry, 'post_id');
+	$rpod = pods('ride', $rideid);
+        $rpod->save('ride-status', 0);
         bk_add_ride_leader_to_ride($rideid, $rpod);
 	}
 }
@@ -2353,9 +2353,9 @@ function bk_guest_signup($entry)
                     'cell_phone' => rgar($entry, 3),
                     'ride_id' => rgar($entry, 13),
                 );
-    $pod = new BikeClubGuest();
+    $pod = pods('guest');
     $gid = $pod->add($data);
-    $rpod = new BikeClubRide($rideid);
+    $rpod = pods('ride', $rideid);
     $rpod->add_to( 'guests', $gid );
     update_post_meta($gid, "_members_access_role", 'active');
     bk_clear_cache();
@@ -2363,13 +2363,13 @@ function bk_guest_signup($entry)
 add_action('gform_after_submission_21', 'bk_rl_update_ride');
 function bk_rl_update_ride($entry)
 {
-	$rpod = new BikeClubRide(get_the_ID());
-	$rideid = $rpod->get_ID();
-    $rl = $rpod->get_ride_leader();
+	$rpod = pods('ride', get_the_ID());
+	$rideid = $rpod->field('ID');
+    $rl = $rpod->field('ride_leader');
 	$post_userid = get_post_field('post_author', $rideid);
 	if ( $post_userid != $rl['ID']) {
-    	wp_update_post([ 'ID' => $rideid, 'post_author' => $rl['ID']]);
-		$attendees = get_post_meta($rpod->get_ID(), '_pods_attendees', true);
+	wp_update_post([ 'ID' => $rideid, 'post_author' => $rl['ID']]);
+		$attendees = get_post_meta($rpod->field('ID'), '_pods_attendees', true);
 	    if (!empty($attendees)) {
             $oldleader_apod = null;
             $newleader_apod = null;
@@ -2378,28 +2378,28 @@ function bk_rl_update_ride($entry)
 				    $aid = $attendee;
 			    else
 				    $aid = $attendee['ID'];
-			    $apod = new BikeClubRideAttendee($aid);
-				$rider = $apod->get_rider();
+			    $apod = pods('ride-attendee', $aid);
+				$rider = $apod->field('rider');
 				if ( $rider == $rl['ID'] ) {
-            		$oldleader_apod = $apod;
+			$oldleader_apod = $apod;
 				}
 				else if ( $rider == $post_userid ) {
-            		$newleader_apod = $apod;
+			$newleader_apod = $apod;
 				}
 		    }
 			if ($oldleader_apod !== null) {
-	            $upod = new BikeClubUser($post_userid);
+	            $upod = pods('user', $post_userid);
 			    $upod->remove_from('rides', $oldleader_aid);
-			    $oldleader_apod->set_ride_attendee_status("No");
+			    $oldleader_apod->save('ride_attendee_status', "No");
 			}
 			if ($newleader_apod === null) {
-        		bk_add_ride_leader_to_ride($rideid, $rpod);
+			bk_add_ride_leader_to_ride($rideid, $rpod);
 			}
 	    }
 	}
 	$canceled = rgar($entry, 35);
 	$num_riders = rgar($entry, 14);
-	$current_status = $rpod->get_ride_status();
+	$current_status = $rpod->field("ride-status");
 	if (empty($current_status))
 		$current_status = -1;
 	$new_status = 0;
@@ -2408,9 +2408,9 @@ function bk_rl_update_ride($entry)
 	else if ($num_riders > 0)
 		$new_status = 4;
     if ($current_status != $new_status) {
-        $rpod->set_ride_status($new_status);
+        $rpod->save('ride-status', $new_status);
 	}
-	$limit = $rpod->get_maximum_signups();
+	$limit = $rpod->field('maximum_signups');
 	if (empty($limit))
 	    $limit = 0;
 	$signups = array();
@@ -2424,7 +2424,7 @@ function bk_rl_update_ride($entry)
 		    $num_to_move = $waitlist_cnt;
 		if ($num_to_move == 0)
 		    return;
-	    $attendees = get_post_meta($rpod->get_ID(), '_pods_attendees', true);
+	    $attendees = get_post_meta($rpod->field('ID'), '_pods_attendees', true);
         if (!empty($attendees)) {
 			$userid_arr = array();
             sort($attendees);
@@ -2440,10 +2440,10 @@ function bk_rl_update_ride($entry)
 				    $userid_arr[$userid] = $attendeeid;
 				else
 				    continue;
-                $apod = new BikeClubRideAttendee($attendeeid);
-			    $ra_status = $apod->get_ride_attendee_status();
+                $apod = pods('ride-attendee', $attendeeid);
+			    $ra_status = $apod->field('ride_attendee_status');
 			    if ($ra_status != "No") {
-			        $wlnum = $apod->get_wait_list_number();
+			        $wlnum = $apod->field('wait_list_number');
 					if ($wlnum > 0) {
 						bk_move_from_waitlist($rpod, $apod);
 						if (--$num_to_move == 0)
@@ -2467,15 +2467,15 @@ add_filter( 'gform_pre_render', 'bk_conditionally_show_field_based_on_time' );
 // show the time field in the RL update ride form to allow ride leaders
 // to update the time of the ride (up to 3 hours before the ride start)
 function bk_conditionally_show_field_based_on_time( $form ) {
-    if ( $form['id'] != 21 ) { 
+    if ( $form['id'] != 21 ) {
         return $form;
     }
     if ( ! empty($_SERVER['REQUEST_URI']) ) {
         $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
         $rideid = basename($path);
-        $pod = new BikeClubRide($rideid);
-        $ride_date = $pod->get_ride_date(true);
-        $start_time = $pod->get_time(true);
+        $pod = pods('ride',$rideid);
+        $ride_date = $pod->display('ride_date');
+        $start_time = $pod->display('time');
         $tz = new DateTimeZone(wp_timezone_string());
         $ridestart = new DateTime($ride_date . ' ' . $start_time, $tz);
         $min_time = new DateTime('now + 3 hours', $tz);
@@ -2486,57 +2486,57 @@ function bk_conditionally_show_field_based_on_time( $form ) {
     }
     foreach ( $form['fields'] as &$field ) {
         if ( $field->id == 6 ) {
-            $field->visibility = $visibility; 
+            $field->visibility = $visibility;
             break;
         }
     }
     return $form;
 }
-  
+
 function bk_send_cancellation_email($rideid = null)
 {
     if (null === $rideid)
         return;
-    $pod = new BikeClubRide($rideid);
+    $pod = pods('ride', $rideid);
     if (empty($pod))
         return;
-    $ride_date = $pod->get_ride_date(true);
-    $start_time = $pod->get_time(true);
+    $ride_date = $pod->display('ride_date');
+    $start_time = $pod->display('time');
     $tz = new DateTimeZone(wp_timezone_string());
 	$ridestart = new DateTime($ride_date . ' ' . $start_time, $tz);
 	$mintime = new DateTime("now", $tz);
 	if ($ridestart < $mintime)
 	    return;
-	$tourfield = $pod->get_tour();
+	$tourfield = $pod->field('tour');
 	$tourid = $tourfield['ID'];
-    $tpod = new BikeClubTour($tourid);
-    $rl = $pod->get_ride_leader();
+    $tpod = pods('tour', $tourid);
+    $rl = $pod->field('ride_leader');
 	$rlid = $rl['ID'];
-    $rlpod = new BikeClubUser($rlid);
-	$pace = $pod->get_pace(true);
+    $rlpod = pods('user', $rlid);
+	$pace = $pod->display('pace');
     $template = get_option('club-settings_ride_cancellation_email');
     $dow_obj = new DateTime($ride_date, $tz);
     $dow = $dow_obj->format("l");
     $subject = "MAF: " . $pace . ' Ride Canceled: ' . $dow . ' ' . $ride_date;
-    $leader_email = $rlpod->get_user_email();
-    $leader = $rlpod->get_display_name();
-    $rc = new BikeClubRole(13256);
-	$rc_user = $rc->get_member();
+    $leader_email = $rlpod->field('user_email');
+    $leader = $rlpod->field('display_name');
+    $rc = pods('role', 13256);
+	$rc_user = $rc->field('member');
     $fromname = $rc_user['display_name'];
     // $from = 'ridecoordinator@email.mafw.org';
     $from = 'ridecoordinator@mafw.org';
     $replyto = 'Reply-To: ' . $leader . ' <' . $leader_email . '>';
-    $preferred_phone = xprofile_get_field("Preferred Contact Phone", $rlpod->get_ID(), 'comma');
+    $preferred_phone = xprofile_get_field("Preferred Contact Phone", $rlpod->field('ID'), 'comma');
     if ($preferred_phone == 'Home')
         $rl_phone = strip_tags(xprofile_get_field_data("Home Phone", $rlid));
     else
         $rl_phone = strip_tags(xprofile_get_field_data('Mobile Phone', $rlid));
-    $tourno = $tpod->get_tour_number();
-    $tourname = $tpod->get_post_title();
-    $startpoint = $tpod->get_start_point(true);
-    $miles = $tpod->get_miles(true);
-    $terrain = $tpod->get_tour_terrain(true);
-    $comments = $pod->get_ride_comments(true);
+    $tourno = $tpod->field('tour_number');
+    $tourname = $tpod->field('post_title');
+    $startpoint = $tpod->display('start_point');
+    $miles = $tpod->display('miles');
+    $terrain = $tpod->display('tour-terrain');
+    $comments = $pod->display('ride_comments');
     $signup = '<a href="' . get_site_url() . '/ride/' . $rideid . '/">Ride Details</a>';
 	$long_ride_date = $dow . ", " . $ride_date;
     $macros = array('_LEADER_NAME_', '_LEADER_PHONE_', '_LEADER_EMAIL_', '_RIDE_DATE_START_', '_START_TIME_', '_TOUR_NAME_', '_TOUR_ID_', '_START_POINT_NAME_', '_PACE_', '_TOUR_MILES_', '_TERRAIN_', '_COMMENTS_', '_SIGNUP_');
@@ -2586,60 +2586,60 @@ function bk_send_adhoc_email($rideid = null)
 {
     if (null === $rideid)
         return;
-    $pod = new BikeClubRide($rideid);
+    $pod = pods('ride', $rideid);
     if (empty($pod))
         return;
     if ( !empty( $_GET['riderole'] ) && $_GET['riderole'] == 2 && current_user_can( "ridecoordinator" ) ) {
 		return;
 	}
-	$tourfield = $pod->get_tour();
+	$tourfield = $pod->field('tour');
     if (!empty($tourfield)) {
 	    $tourid = $tourfield['ID'];
-        $tpod = new BikeClubTour($tourid);
+        $tpod = pods('tour', $tourid);
     }
     else {
 		$tpod = null;
 	}
-    $rl = $pod->get_ride_leader();
+    $rl = $pod->field('ride_leader');
 	$rlid = $rl['ID'];
 	if ($rlid == PROPOSED_RIDE_LEADER_USERID) {
 		return;
 	}
-    $rlpod = new BikeClubUser($rlid);
-	$pace = $pod->get_pace(true);
+    $rlpod = pods('user', $rlid);
+	$pace = $pod->display('pace');
     $template = get_option('club-settings_ride_schedule_notification_email');
-    $ride_date = $pod->get_ride_date(true);
+    $ride_date = $pod->display('ride_date');
     $tz = new DateTimeZone(wp_timezone_string());
     $dow_obj = new DateTime($ride_date, $tz);
     $dow = $dow_obj->format("l");
 	$ride_date = $dow . ", " . $ride_date;
-    $start_time = $pod->get_time(true);
-    $subject = "MAF: " . $pace . ' Ride Scheduled for ' . $dow . ' ' . $pod->get_ride_date(true);
-    $leader_email = $rlpod->get_user_email();
-    $leader = $rlpod->get_display_name();
-    $rc = new BikeClubRole(13256);
-	$rc_user = $rc->get_member();
+    $start_time = $pod->display('time');
+    $subject = "MAF: " . $pace . ' Ride Scheduled for ' . $dow . ' ' . $pod->display('ride_date');
+    $leader_email = $rlpod->field('user_email');
+    $leader = $rlpod->field('display_name');
+    $rc = pods('role', 13256);
+	$rc_user = $rc->field('member');
     $fromname = $rc_user['display_name'];
     // $from = 'ridecoordinator@email.mafw.org';
     $from = 'ridecoordinator@mafw.org';
     $replyto = 'Reply-To: ' . $leader . ' <' . $leader_email . '>';
-    $preferred_phone = xprofile_get_field("Preferred Contact Phone", $rlpod->get_ID(), 'comma');
+    $preferred_phone = xprofile_get_field("Preferred Contact Phone", $rlpod->field('ID'), 'comma');
     if ($preferred_phone == 'Home')
         $rl_phone = strip_tags(xprofile_get_field_data("Home Phone", $rlid));
     else
         $rl_phone = strip_tags(xprofile_get_field_data('Mobile Phone', $rlid));
     if ($tpod !== null) {
-        $tourno = $tpod->get_tour_number();
-        $tourname = $tpod->get_post_title();
+        $tourno = $tpod->field('tour_number');
+        $tourname = $tpod->field('post_title');
     }
 	else {
 		$tourno = "";
 		$tourname = "";
 	}
-    $startpoint = $tpod->get_start_point(true);
-    $miles = $tpod->get_miles(true);
-    $terrain = $tpod->get_tour_terrain(true);
-    $comments = $pod->get_ride_comments(true);
+    $startpoint = $tpod->display('start_point');
+    $miles = $tpod->display('miles');
+    $terrain = $tpod->display('tour-terrain');
+    $comments = $pod->display('ride_comments');
     $signup = '<p><a href="' . get_site_url() . '/ride/' . $rideid . '/">Sign Up</a></p>';
     $macros = array('_LEADER_NAME_', '_LEADER_PHONE_', '_LEADER_EMAIL_', '_RIDE_DATE_START_', '_START_TIME_', '_TOUR_NAME_', '_TOUR_ID_', '_START_POINT_NAME_', '_PACE_', '_TOUR_MILES_', '_TERRAIN_', '_COMMENTS_', '_SIGNUP_');
     $replacements = array($leader, $rl_phone, $leader_email, $ride_date, $start_time, $tourname, $tourno, $startpoint, $pace, $miles, $terrain, $comments, $signup);
@@ -2680,24 +2680,24 @@ function bk_broadcast_email($fromname, $subject, $msg, $from, $replyto, $sendto,
 	if ($sendto == 4) { // ride attendees
         if ($ridenum > 0) {
             $cell_phones = array();
-            $rpod = new BikeClubRide($ridenum);
-            $rl = $rpod->get_ride_leader();
+            $rpod = pods('ride', $ridenum);
+            $rl = $rpod->field('ride_leader');
             if ($rl['ID'] == get_current_user_id()) {
                 if ($sendtome == 1) {
 		            $rl_info = get_userdata($rl['ID']);
                     wp_mail($rl_info->user_email, $subject, $msg, $headers);
                 }
-			$guests = $rpod->get_guests();
+			$guests = $rpod->field('guests');
 				if (!empty($guests)) {
-	    			foreach ($guests as $guest) {
+				foreach ($guests as $guest) {
 				$email = get_post_meta($guest['ID'], 'email', true);
 						if (!empty($email) && is_email($email)) {
 							$count++;
-                        	$headers[] = 'BCC: ' . $email;
+				$headers[] = 'BCC: ' . $email;
 						}
-        			}
-    			}
-	            $attendees = get_post_meta($rpod->get_ID(), '_pods_attendees', true);
+				}
+			}
+	            $attendees = get_post_meta($rpod->field('ID'), '_pods_attendees', true);
 	            if (!empty($attendees)) {
 		            foreach ($attendees as $attendee) {
 						if (!is_array($attendee))
@@ -2777,9 +2777,9 @@ function bk_create_post($subject, $msg, $cat_id, $user_id)
       'post_author'   => $user_id,
       'post_category' => array( $cat_id )
     );
- 
+
     // Insert the post into the database
-    $post_id = wp_insert_post( $my_post ); 
+    $post_id = wp_insert_post( $my_post );
     // if ($post_id)
 		// update_post_meta($post_id,  "_members_access_role", 'active');
 }
@@ -2801,107 +2801,107 @@ function bk_process_broadcast_email($entry, $form)
     $current_user = wp_get_current_user();
     $replyto = 'Reply-To: ' . $current_user->display_name . ' <' . $current_user->user_email . '>';
     if ($role == "president" && (current_user_can("president") || current_user_can("manage_options"))) {
-        $frominfo = new BikeClubRole(13254); // president
+        $frominfo = pods('role', 13254); // president
         $from = 'president@mafw.org';
-	    $from_info = $frominfo->get_member();
+	    $from_info = $frominfo->field('member');
         $fromname = $from_info['display_name'];
         $replyto = 'Reply-To: ' . $fromname . ' <president@mafw.org>';
         if ($to != "Just Me") {
-            $sender = new BikeClubRole(13254);
-	    $member = $sender->get_member();
+            $sender = pods('role', 13254);
+	    $member = $sender->field('member');
             $cat_id = get_cat_ID( 'From the President' );
             bk_create_post($subject, $msg, $cat_id, $member['ID']);
         }
     }
     else if ($role == "presidentelect" && (current_user_can("president_elect") || current_user_can("manage_options"))) {
-        $frominfo = new BikeClubRole(225594); // president elect
+        $frominfo = pods('role', 225594); // president elect
         $from = 'president_elect@mafw.org';
-	    $from_info = $frominfo->get_member();
+	    $from_info = $frominfo->field('member');
         $fromname = $from_info['display_name'];
         $replyto = 'Reply-To: ' . $fromname . ' <president_elect@mafw.org>';
         if ($to != "Just Me") {
-            $sender = new BikeClubRole(13254);
-	    $member = $sender->get_member();
+            $sender = pods('role', 13254);
+	    $member = $sender->field('member');
             $cat_id = get_cat_ID( 'From the President Elect' );
             bk_create_post($subject, $msg, $cat_id, $member['ID']);
         }
     }
     else if ($role == "ridecoordinator" && (current_user_can("ridecoordinator") || current_user_can("manage_options"))) {
-        $frominfo = new BikeClubRole(13256); // ride coordinator
+        $frominfo = pods('role', 13256); // ride coordinator
         // $from = 'ridecoordinator@email.mafw.org';
         $from = 'ridecoordinator@mafw.org';
-	    $from_info = $frominfo->get_member();
+	    $from_info = $frominfo->field('member');
         $fromname = $from_info['display_name'];
         $replyto = 'Reply-To: ' . $fromname . ' <ridecoordinator@mafw.org>';
         if ($to != "Just Me") {
-            $sender = new BikeClubRole(13256);
-	    $member = $sender->get_member();
+            $sender = pods('role', 13256);
+	    $member = $sender->field('member');
             $cat_id = get_cat_ID( 'From the Ride Coordinator' );
             bk_create_post($subject, $msg, $cat_id, $member['ID']);
         }
     }
     else if ($role == "safetycoordinator" && current_user_can("safetycoordinator") ) {
-        $frominfo = new BikeClubRole(13260); // safety coordinator
+        $frominfo = pods('role', 13260); // safety coordinator
         $from = 'safety@mafw.org';
-	    $from_info = $frominfo->get_member();
+	    $from_info = $frominfo->field('member');
         $fromname = $from_info['display_name'];
         $replyto = 'Reply-To: ' . $fromname . ' <safety@mafw.org>';
         if ($to != "Just Me") {
-            $sender = new BikeClubRole(13260);
-	    $member = $sender->get_member();
+            $sender = pods('role', 13260);
+	    $member = $sender->field('member');
             $cat_id = get_cat_ID( 'From the Safety Coordinator' );
             bk_create_post($subject, $msg, $cat_id, $member['ID']);
         }
     }
     else if ($role == "socialcoordinator" && current_user_can("socialcoordinator") ) {
-        $frominfo = new BikeClubRole(13265); // social coordinator
+        $frominfo = pods('role', 13265); // social coordinator
         $from = 'social@mafw.org';
-	    $from_info = $frominfo->get_member();
+	    $from_info = $frominfo->field('member');
         $fromname = $from_info['display_name'];
         $replyto = 'Reply-To: ' . $fromname . ' <social@mafw.org>';
         if ($to != "Just Me") {
-            $sender = new BikeClubRole(13265);
-	    $member = $sender->get_member();
+            $sender = pods('role', 13265);
+	    $member = $sender->field('member');
             $cat_id = get_cat_ID( 'From the Social Coordinator' );
             bk_create_post($subject, $msg, $cat_id, $member['ID']);
         }
     }
     else if ($role == "itcoordinator" && current_user_can("manage_options") ) {
-        $frominfo = new BikeClubRole(13262); // IT coordinator
+        $frominfo = pods('role', 13262); // IT coordinator
         // $from = 'it_coordinator@email.mafw.org';
         $from = 'it_coordinator@mafw.org';
-	    $from_info = $frominfo->get_member();
+	    $from_info = $frominfo->field('member');
         $fromname = $from_info['display_name'];
         $replyto = 'Reply-To: ' . $fromname . ' <it_coordinator@mafw.org>';
         if ($to != "Just Me") {
-            $sender = new BikeClubRole(13262);
-	        $member = $sender->get_member();
+            $sender = pods('role', 13262);
+	        $member = $sender->field('member');
             $cat_id = get_cat_ID( 'From the IT Coordinator' );
             bk_create_post($subject, $msg, $cat_id, $member['ID']);
         }
     }
     else if ($role == "newslettereditor" && (current_user_can("newslettereditor") || current_user_can("manage_options"))) {
-        $frominfo = new BikeClubRole(13261); // newsletter editor
+        $frominfo = pods('role', 13261); // newsletter editor
         $from = 'newsletter@mafw.org';
-	    $from_info = $frominfo->get_member();
+	    $from_info = $frominfo->field('member');
         $fromname = $from_info['display_name'];
         $replyto = 'Reply-To: ' . $fromname . ' <newsletter@mafw.org>';
         if ($to != "Just Me") {
-            $sender = new BikeClubRole(13261);
-	        $member = $sender->get_member();
+            $sender = pods('role', 13261);
+	        $member = $sender->field('member');
             $cat_id = get_cat_ID( 'Newsletter Editor' );
             bk_create_post($subject, $msg, $cat_id, $member['ID']);
             if ($subject) {
 		        $strs = [ " now available", " Available" ];
-		        $subj = str_replace($strs, "", $subject); 
+		        $subj = str_replace($strs, "", $subject);
                 set_transient('bk_nl_announcement_subject', $subj);
             }
         }
     }
     else if ($role == "membershipcoordinator" && (current_user_can("membercoordinator") || current_user_can("manage_options"))) {
-        $frominfo = new BikeClubRole(13258);
+        $frominfo = pods('role', 13258);
         $from = 'membership@mafw.org';
-	    $from_info = $frominfo->get_member();
+	    $from_info = $frominfo->field('member');
         $fromname = $from_info['display_name'];
         $replyto = 'Reply-To: ' . $fromname . ' <membership@mafw.org>';
     }
@@ -2915,10 +2915,10 @@ function bk_process_broadcast_email($entry, $form)
     }
     else if (current_user_can("manage_options")){
 		$to = "Just Me";
-        $frominfo = new BikeClubRole(13262); // it coordinator
+        $frominfo = pods('role', 13262); // it coordinator
         // $from = 'it_coordinator@email.mafw.org';
         $from = 'it_coordinator@mafw.org';
-	    $from_info = $frominfo->get_member();
+	    $from_info = $frominfo->field('member');
         $fromname = $from_info['display_name'];
         $replyto = 'Reply-To: ' . $fromname . ' <it_coordinator@mafw.org>';
     }
@@ -2959,8 +2959,8 @@ function bike_tour_pick_data($data, $name, $value, $options){
 		foreach ($data as $id => $value) {
 			if ($id) {
 				$p = pods($podname, $id);
-		if ($p && $p->get_active() == 1) {
-			    	$newdata[$id] = $value;
+		if ($p && $p->field('active') == 1) {
+				$newdata[$id] = $value;
 				}
 			}
 			else
@@ -3015,8 +3015,8 @@ function tour_counts()
     while ($query->have_posts()) {
          $query->the_post();
          $post_id = get_the_ID();
-         $pod = new BikeClubRide($post_id);
-         $tournum_arr = $pod->get_tour();
+         $pod = pods('ride', $post_id);
+         $tournum_arr = $pod->field('tour');
          if (is_array($tournum_arr))
 			 $tid = $tournum_arr['ID'];
 	     else
@@ -3036,18 +3036,18 @@ function tour_counts()
 add_shortcode('bike_add_tours_to_rc', 'bike_add_tour_to_hazard');
 function bike_add_tour_to_hazard($hazard, $tourid)
 {
-	$args = array( 'post_type' => 'tour', 
+	$args = array( 'post_type' => 'tour',
 		           'no_found_rows' => true,
                    'posts_per_page' => -1 );
 	$query = new WP_Query($args);
     while ($query->have_posts()) {
          $query->the_post();
          $post_id = get_the_ID();
-         $tpod = new BikeClubTour($post_id);
-         $tournum = $tpod->get_tour_number();
+         $tpod = pods('tour', $post_id);
+         $tournum = $tpod->field('tour_number');
          $map[$tournum] = $post_id;
          $hazids = array();
-         $hazards = $tpod->get_road_closures();
+         $hazards = $tpod->field('road_closures');
          if (is_array($hazards))
              foreach ($hazards as $hazard) {
                  $hazids[] = $hazard['ID'];
@@ -3066,9 +3066,9 @@ function bike_add_tour_to_hazard($hazard, $tourid)
 		        $tourid = $map[$tournum];
                 $hazids = $tourmap[$tourid];
                 if (!array_key_exists($rcid, $hazids)) {
-                    $pod = new BikeClubRoadClosuresWarning($rcid); // upper creek
+                    $pod = pods('road_closureswarning', $rcid); // upper creek
                     $pod->add_to('tour', $tourid);
-				    $ret .= "adding tour " . $tournum . '(' . $tourid . ') to ' . $pod->get_title() . '<br>';
+				    $ret .= "adding tour " . $tournum . '(' . $tourid . ') to ' . $pod->field('title') . '<br>';
                 }
             }
             else
@@ -3081,8 +3081,8 @@ add_shortcode('bk-guest-test', 'bk_guest_test');
 function bk_guest_test()
 {
     $ret = "";
-    $rpod = new BikeClubRide(200433);
-    $guests = $rpod->get_guests();
+    $rpod = pods('ride', 200433);
+    $guests = $rpod->field('guests');
 	if (!empty($guests)) {
 	    foreach ($guests as $guest) {
             $name = get_post_meta($guest['ID'], 'guests_name', true);
@@ -3094,11 +3094,11 @@ function bk_guest_test()
 
 function bk_user_on_ride($rideid, $riderid)
 {
-	$pod = new BikeClubRide($rideid);
-    $rl = $pod->get_ride_leader();
+	$pod = pods('ride', $rideid);
+    $rl = $pod->field('ride_leader');
 	if ($rl['ID'] == $riderid)
 	    return true;
-	$attendees = get_post_meta($pod->get_ID(), '_pods_attendees', true);
+	$attendees = get_post_meta($pod->field('ID'), '_pods_attendees', true);
 	if (!empty($attendees)) {
 		$userid_arr = array();
 	    foreach ($attendees as $attendee) {
@@ -3121,13 +3121,13 @@ function bk_user_on_ride($rideid, $riderid)
 	return false;
 }
 
-// check if rider is already signed up (or is RL) on another ride 
+// check if rider is already signed up (or is RL) on another ride
 // returns rideid of other ride or 0 means they are not signed up
 //  on another ride
 function rider_signupcheck($start_time, $rideid)
 {
-	$rpod = new BikeClubRide($rideid);
-    $ride_date = $rpod->get_ride_date(true);
+	$rpod = pods('ride', $rideid);
+    $ride_date = $rpod->display('ride_date');
 	$current_userid = get_current_user_id();
     $attendees = bk_get_attended_rides($current_userid);
 	$min_time = clone $start_time;
@@ -3144,20 +3144,20 @@ function rider_signupcheck($start_time, $rideid)
 			$userid = get_post_field('post_author', $attendeeid);
 			if (empty($userid) || $userid == 0)
 			    continue;
-			$apod = new BikeClubRideAttendee($attendeeid);
-            if ($apod->get_ride_attendee_status() == "No")
+			$apod = pods('ride-attendee', $attendeeid);
+            if ($apod->field('ride_attendee_status') == "No")
 			    continue;
-			$wlnum = $apod->get_wait_list_number();
-			$ride = $apod->get_ride();
+			$wlnum = $apod->field('wait_list_number');
+			$ride = $apod->field('ride');
 			if (!empty($ride) && $ride['ID'] > 0) {
 				// if alreay signed up on this ride then allow them to change
 				// status by treating them as not signed up on another ride
-			    $rpod = new BikeClubRide($ride['ID']);
+			    $rpod = pods('ride', $ride['ID']);
 				if ($ride['ID'] == $rideid)
 				    return 0;
-                if ($rpod->get_ride_status() == 0) {
-                    $ride_date = $rpod->get_ride_date(true);
-                    $st_time = $rpod->get_time(true);
+                if ($rpod->field('ride-status') == 0) {
+                    $ride_date = $rpod->display('ride_date');
+                    $st_time = $rpod->display('time');
 	                $tz = new DateTimeZone(wp_timezone_string());
 				    $datestr = $ride_date . ' ' . $st_time;
 				    $start_time = DateTime::createFromFormat("m/d/Y h:i a", $datestr, $tz);
@@ -3181,8 +3181,8 @@ function bk_ride_date_loc_prohibited($date, $tourid)
 	$datestr = $ride_date->format("Y-m-d");
     $ride_date_minus_one = $ride_date->modify('-1 day');
 	$datestr_minus_one = $ride_date_minus_one->format("Y-m-d");
-	$tpod = new BikeClubTour($tourid);
-    $start = $tpod->get_start_point();
+	$tpod = pods('tour', $tourid);
+    $start = $tpod->field('start_point');
 	$startid = $start ? $start['ID'] : 0;
 	$args = array(
 			'relation' => 'AND',
@@ -3210,20 +3210,20 @@ function bk_ride_date_loc_prohibited($date, $tourid)
         while ($query->have_posts()) {
             $query->the_post();
 			$blockid = get_the_ID();
-	        $pod = new BikeClubLocationDateBlock($blockid);
-		    $start_loc = $pod->get_start_location();
-		    $start_date = $pod->get_start_date();
-		    $end_date = $pod->get_end_date();
-		$dow = $pod->get_days_of_week();
-    		if ( $dow == "All Days" ||
+	        $pod = pods('locationdateblock', $blockid);
+		    $start_loc = $pod->field('start_location');
+		    $start_date = $pod->field('start_date');
+		    $end_date = $pod->field('end_date');
+		$dow = $pod->field('days_of_week');
+		if ( $dow == "All Days" ||
                 ($dow == "Weekends" && $ride_date->format('N') >= 6) ||
-        		($dow == "Weekdays" && $ride_date->format('N') < 6))
-    		{
-		    	if (empty($start_loc) || $start_loc['ID'] == $startid) {
-				return strip_tags($pod->get_post_content());
-        		}
+			($dow == "Weekdays" && $ride_date->format('N') < 6))
+		{
+			if (empty($start_loc) || $start_loc['ID'] == $startid) {
+				return strip_tags($pod->field('post_content'));
 			}
-    	}
+			}
+	}
 	}
     return null;
 }
@@ -3233,8 +3233,8 @@ function rideleader_signupcheck($start_time, $tourid)
 	    return 0;
 	// error_log("starttime:" . $start_time->format("Y-m-d"));
 	// error_log("tourid:" . $tourid);
-    $tpod = new BikeClubTour($tourid);
-    $startid = $tpod->get_start_point();
+    $tpod = pods('tour', $tourid);
+    $startid = $tpod->field('start_point');
     if (is_array($startid))
 	    $startid = $startid['ID'];
 
@@ -3286,14 +3286,14 @@ function rideleader_signupcheck($start_time, $tourid)
         while ($query->have_posts()) {
             $query->the_post();
 			$rideid = get_the_ID();
-            $rpod = new BikeClubRide($rideid);
-            $tourid = $rpod->get_tour();
+            $rpod = pods('ride', $rideid);
+            $tourid = $rpod->field('tour');
             if (is_array($tourid))
                 $tourid = $tourid['ID'];
 			if (!empty($tourid)) {
 			    // error_log("tourid:" . $tourid);
-                $tpod = new BikeClubTour($tourid);
-			    $start = $tpod->get_start_point();
+                $tpod = pods('tour', $tourid);
+			    $start = $tpod->field('start_point');
                 if (is_array($start))
                     $start = $start['ID'];
 				if (!empty($start)) {
@@ -3480,11 +3480,11 @@ function bk_election_validate( $validation_result ) {
 add_filter( 'gform_validation_21', 'bikeride_rl_validate' );
 function bikeride_rl_validate( $validation_result ) {
     $form = $validation_result['form'];
-	$rpod = new BikeClubRide(get_the_ID());
+	$rpod = pods('ride', get_the_ID());
     foreach ($form['fields'] as &$field ) {
         if ($field->id == '14' && rgpost('input_14') > 0) { // rider count field
             $tz = new DateTimeZone(wp_timezone_string());
-            $ridedate = new DateTime($rpod->get_ride_date(true), $tz);
+            $ridedate = new DateTime($rpod->display('ride_date'), $tz);
             $curdate = new DateTime("now", $tz);
             if ($ridedate > $curdate && rgpost('input_14') > 0) {
 	            $validation_result['is_valid'] = false;
@@ -3581,10 +3581,10 @@ function bikeride_validation( $validation_result ) {
 			} else {
 		        $tourid = rgpost('input_21');
 				$paceid = rgpost('input_3');
-				$tpod = new BikeClubTour($tourid);
-				$miles = $tpod->get_miles();
-				$pace = new BikeClubPace($paceid);
-				$minspeed = $pace->get_minspeed();
+				$tpod = pods('tour', $tourid);
+				$miles = $tpod->field('miles');
+				$pace = pods('pace', $paceid);
+				$minspeed = $pace->field('minspeed');
                 if ($minspeed == 0)
                     $minspeed = 9;
 				$interval = $sunset->diff($start_time);
@@ -3652,9 +3652,9 @@ add_filter( 'gform_pre_validation_21', 'bikeupdride_hide_status' );
 add_filter( 'gform_pre_submission_filter_21', 'bikeupdride_hide_status' );
 add_filter( 'gform_admin_pre_render_21', 'bikeupdride_hide_status' );
 function bikeupdride_hide_status( $form ) {
-    $rpod = new BikeClubRide(get_the_ID());
+    $rpod = pods('ride', get_the_ID());
 	$tz = new DateTimeZone(wp_timezone_string());
-	$ridedate = new DateTime($rpod->get_ride_date(true), $tz);
+	$ridedate = new DateTime($rpod->display('ride_date'), $tz);
     $curdate = new DateTime("now", $tz);
 	if ($ridedate < $curdate) {
         foreach ($form['fields'] as &$field ) {
@@ -3749,7 +3749,7 @@ function bike_start_choices($val)
 {
     $startmap = array();
     $choices = array();
-    $pod = new BikeClubStartPoint();
+    $pod = pods('start_point');
     $params = array(
         'orderby' => 't.post_title' ,
         'limit' => -1,
@@ -3757,7 +3757,7 @@ function bike_start_choices($val)
     );
     $pod->find($params);
     while( $pod->fetch()) {
-        $title = $pod->get_post_title();
+        $title = $pod->field('post_title');
         if (!array_key_exists($title, $startmap) && !empty($title)) {
             $startmap[$title] = $title;
 	        $choices[] = array(
@@ -3778,13 +3778,13 @@ function bike_tour_choices($choices)
         // $entry = GFAPI::get_entry($entryid);
         // if (rgar($entry, 29) != 1)
 			// $active = 0;
-    // }	
+    // }
 	$arr = array();
 	foreach ($choices as $choice) {
 		if (array_key_exists('value', $choice) && is_numeric($choice['value'])) {
-		    $tpod = new BikeClubTour($choice['value']);
-			if ($tpod->get_active() == $active)
-	            $arr[] = array('tourno' => $tpod->get_tour_number(), 'title' => $choice['text'], 'ID' => $choice['value']);
+		    $tpod = pods('tour', $choice['value']);
+			if ($tpod->field('active') == $active)
+	            $arr[] = array('tourno' => $tpod->field('tour_number'), 'title' => $choice['text'], 'ID' => $choice['value']);
 		}
 	}
 	$choices = array();
@@ -3797,70 +3797,70 @@ function bike_tour_choices($choices)
 }
 function bk_do_ride_cancellation($id) {
 	bk_send_cancellation_email($id);
-	$pod = new BikeClubRide($id);
-	$attendees = get_post_meta($pod->get_ID(), '_pods_attendees', true);
+	$pod = pods('ride', $id);
+	$attendees = get_post_meta($pod->field('ID'), '_pods_attendees', true);
 	if (!empty($attendees)) {
 		foreach ($attendees as $attendee) {
 			if (!is_array($attendee))
 				$aid = $attendee;
 			else
 				$aid = $attendee['ID'];
-			$apod = new BikeClubRideAttendee($aid);
+			$apod = pods('ride-attendee', $aid);
 			if (!empty($apod))
-				$apod->set_ride_attendee_status("No");
+				$apod->save('ride_attendee_status', "No");
 		}
 	}
 }
 function bk_send_ride_email_if_needed($pod, $id, $userid) {
     // check if the time of the ride is in the past
     $tz = new DateTimeZone(wp_timezone_string());
-    $ridedate = new DateTime($pod->get_ride_date(true), $tz);
+    $ridedate = new DateTime($pod->display('ride_date'), $tz);
     $curdate = new DateTime("now", $tz);
-	$email_sent = $pod->get_email_sent();
-	$rl = $pod->get_ride_leader();
-    $status = $pod->get_ride_status();
+	$email_sent = $pod->field('email_sent');
+	$rl = $pod->field('ride_leader');
+    $status = $pod->field("ride-status");
 	$rlid = $rl['ID'];
     if ($status == 1) {
 		if ($rlid != PROPOSED_RIDE_LEADER_USERID)
-			$pod->set_ride_leader(PROPOSED_RIDE_LEADER_USERID);
+			$pod->save('ride_leader', PROPOSED_RIDE_LEADER_USERID);
     }
 	else if ($rlid == PROPOSED_RIDE_LEADER_USERID) {
-		$pod->set_ride_status(1);
+		$pod->save('ride-status', 1);
         $status = 1;
     }
     if ($status == 0 && (empty($email_sent) || $email_sent == 0) && $ridedate >= $curdate) {
         bk_send_adhoc_email($id);
-		$pod->set_email_sent(1);
+		$pod->save('email_sent', 1);
     }
 }
-add_action('pods_api_post_save_pod_item_ride', 'bike_ride_post_save_function', 10, 3); 
-function bike_ride_post_save_function($pieces, $is_new_item, $id) { 
+add_action('pods_api_post_save_pod_item_ride', 'bike_ride_post_save_function', 10, 3);
+function bike_ride_post_save_function($pieces, $is_new_item, $id) {
     global $wpdb;
     if (!current_user_can('manage_options')
             && !current_user_can('ridecoordinator')
             && !current_user_can('rideleader'))
-        return; 
-	$pod = new BikeClubRide($id);
-	$date = $pod->get_ride_date(true);
-	$pacename = $pod->get_pace(true);
+        return;
+	$pod = pods('ride', $id);
+	$date = $pod->display("ride_date");
+	$pacename = $pod->display("pace");
 	$tz = new DateTimeZone(wp_timezone_string());
-	$current_status = $pod->get_ride_status();
-	$rcount = $pod->get_rider_count(true);
-	$canceled = $pod->get_ride_canceled(true);
-	$time = $pod->get_time();
+	$current_status = $pod->field("ride-status");
+	$rcount = $pod->display("rider_count");
+	$canceled = $pod->display("ride_canceled");
+	$time = $pod->field("time");
 	$pieces = explode(':', $time);
     remove_action('pods_api_post_save_pod_item_ride', 'bike_ride_post_save_function');
 	if ( $pieces[0] == "00" ) {
 	    $time = "12:" . $pieces[1] . ":00";
-		$pod->set_time($time);
+		$pod->save('time', $time);
 	}
 	$datetime_obj = new DateTime($date . ' ' . $time, $tz);
 	$datetime = $datetime_obj->format("D, M dS, Y h:ia");
 	$wpdb->update( $wpdb->posts, array('comment_status' => 'open'), array('ID' => $id));
-	$userfield = $pod->get_ride_leader();
+	$userfield = $pod->field('ride_leader');
     if (is_array($userfield)) {
         $userid = $userfield['ID'];
-	    $username = $pod->get_ride_leader(true);
+	    $username = $pod->display('ride_leader');
     }
     else {
 		$userid = get_current_user_id();
@@ -3870,25 +3870,25 @@ function bike_ride_post_save_function($pieces, $is_new_item, $id) {
 	}
     wp_update_post([ 'ID' => $id, 'post_author' => $userid ]);
     $rideleadername = $username;
-	$tpodid = $pod->get_tour();
+	$tpodid = $pod->field("tour");
 	$title = "";
 	if (!empty($tpodid) && !$tpodid > 0) {
-	    $tpod = new BikeClubTour($tpodid);
+	    $tpod = pods("tour", $tpodid);
 	    if (!empty($tpod)) {
-	        $tourno = $tour->get_tour_number();
-	        $tourname = $tour->get_post_title();
+	        $tourno = $tour->field('tour_number');
+	        $tourname = $tour->field('post_title');
             $title = $datetime . ' : ' . $tourno . " " . $tourname . " " . $pacename . " " . $username;
         }
 	}
     if (empty($title))
         $title = $datetime . ' : ' . $pacename . " " . $username;
-	$pod->set_post_title($title);
+	$pod->save( 'post_title', $title);
     // ride-status: 0=scheduled 1=proposed 2=canceled 3=denied 4=ridden
     // if ride leader fills in number of riders and the status is scheduled
     // then change the status to ridden
     if ($canceled == "Yes") {
         if ($current_status == 0 || empty($current_status) ) {
-            $pod->set_ride_status(2);
+            $pod->save('ride-status', 2);
 			$current_status = 2;
 			bk_do_ride_cancellation($id);
 	    }
@@ -3901,29 +3901,29 @@ function bike_ride_post_save_function($pieces, $is_new_item, $id) {
     }
     else if (empty($current_status) || $current_status == 0) {
 			if ("" !== $rideleadername && stripos($rideleadername, "needs") == false  && stripos($rideleadername, "proposed" ) == false ) {
-            $pod->set_ride_status(0);
+            $pod->save('ride-status', 0);
 			$current_status =  0;
             // check if the time of the ride is in the past
 	        $tz = new DateTimeZone(wp_timezone_string());
-	        $ridedate = new DateTime($pod->get_ride_date(true), $tz);
+	        $ridedate = new DateTime($pod->display('ride_date'), $tz);
             $curdate = new DateTime("now", $tz);
-			$email_sent = $pod->get_email_sent();
+			$email_sent = $pod->field('email_sent');
             if ((empty($email_sent) || $email_sent == 0) && $ridedate >= $curdate) {
                 bk_send_adhoc_email($id);
-				$pod->set_email_sent(1);
+				$pod->save('email_sent', 1);
 	            bk_remove_from_other_rides($userid, $id, 1);
 		    }
 	    }
     }
 	if (empty($current_status)) {
-        $pod->set_ride_status(0);
+        $pod->save('ride-status', 0);
     }
     add_action('pods_api_post_save_pod_item_ride', 'bike_ride_post_save_function', 10, 3);
     bk_clear_cache();
-} 
+}
 add_action( 'wp_enqueue_scripts', 'tu_load_font_awesome' );
-/** 
- * Enqueue Font Awesome. 
+/**
+ * Enqueue Font Awesome.
  */
 function tu_load_font_awesome() {
     wp_enqueue_style( 'font-awesome', '//use.fontawesome.com/releases/v5.8.1/css/all.css', array(), '5.8.1' );
@@ -3955,7 +3955,7 @@ function myplugin_load_textdomain() {
 
 // when user changes name make sure it's just the first and last name
 function bike_validate_name($data) {
-    if ( $data->field_id == 1 && !empty($data->value)) { 
+    if ( $data->field_id == 1 && !empty($data->value)) {
        $arr = explode(" ", $data->value);
        $cnt = count($arr);
 	   if ($cnt < 2) {
@@ -4019,9 +4019,9 @@ add_filter( 'gform_include_thousands_sep_pre_format_number', function ( $include
 }, 10, 2 );
 add_filter( 'wp_get_nav_menu_items','bike_nav_items', 11, 3 );
 
-function bike_nav_items( $items, $menu, $args ) 
+function bike_nav_items( $items, $menu, $args )
 {
-    foreach( $items as $item ) 
+    foreach( $items as $item )
     {
         if( 15785 == $item->ID ) {
 	        $tz = new DateTimeZone(wp_timezone_string());
@@ -4047,7 +4047,7 @@ function bike_nav_items( $items, $menu, $args )
 		}
         else if (135812 == $item->ID && !is_admin() && current_user_can('active')) {
 			if (strpos($item->url, "&logged_in=1") !== false) {
-            	$item->url .= '&logged_in=1';
+		$item->url .= '&logged_in=1';
 			}
         }
     }
@@ -4088,7 +4088,7 @@ function bike_tour_list_func($atts)
     $entryid = get_user_meta(get_current_user_id(), 'search_tours_entry_id', true);
     $type = "1";
     $is_ride_coordinator = 0;
-    $can_edit = current_user_can('ridecoordinator') || current_user_can('rc_cap') || current_user_can('manage_options'); 
+    $can_edit = current_user_can('ridecoordinator') || current_user_can('rc_cap') || current_user_can('manage_options');
     $can_add = $can_edit || current_user_can('rideleader');
     if (!empty($_GET['ride_coordinator']) && $_GET['ride_coordinator'] == '1' && $can_edit)
 	    $is_ride_coordinator = 1;
@@ -4166,7 +4166,7 @@ function bike_tour_list_func($atts)
         $filter .= ' AND tour_comments.meta_value LIKE "%' . $tournotes . '%"';
     if (!empty($creator))
         $filter .= ' AND creator.meta_value LIKE "%' . $creator . '%"';
-    $tpod = new BikeClubTour();
+    $tpod = pods('tour');
     $params = array(
             'orderby' => 'CAST(tour_number.meta_value AS unsigned)' ,
 	         'limit' => -1,
@@ -4174,9 +4174,9 @@ function bike_tour_list_func($atts)
         );
     $tpod->find($params);
     while( $tpod->fetch()) {
-        $tourno = $tpod->get_tour_number();
-        $tid = $tpod->get_ID();
-        $hazards = empty($tpod->get_road_closures()) ? "" : "*";
+        $tourno = $tpod->field('tour_number');
+        $tid = $tpod->field('ID');
+        $hazards = empty($tpod->field('road_closures')) ? "" : "*";
 	    $tourid = '';
         $schedride = '';
         if ($can_edit) {
@@ -4194,12 +4194,12 @@ function bike_tour_list_func($atts)
 			   '" class="button ride-button">Schedule Ride</a>';
 		}
 		$ptpage = '<a href="#" class="pace-terrain">';
-        $terrain = $tpod->get_tour_terrain();
+        $terrain = $tpod->field('tour-terrain');
         if ($terrain)
             $terrain_link = $ptpage . $terrain['post_title'] . '</a>';
         else
             $terrain_link = "";
-        $start = $tpod->get_start_point();
+        $start = $tpod->field('start_point');
         if ($start) {
             $url = get_site_url() . '/start-point/' . $start['post_name'] . '/';
             $startloc = '<a href="' . esc_url($url) . '">' . $start['post_title'] . '</a>';
@@ -4207,19 +4207,19 @@ function bike_tour_list_func($atts)
         else {
             $startloc = "";
         }
-        $ttype = $tpod->get_tour_type();
-        $climb = intval($tpod->get_climb());
-        $miles = intval($tpod->get_miles());
+        $ttype = $tpod->field('tour_type');
+        $climb = intval($tpod->field('climb'));
+        $miles = intval($tpod->field('miles'));
 	if ($miles <= 0)
 	    $miles = 1; // avoid divide by zero
         $avg_climb =  $miles >= 0 ? round($climb/$miles) : 0;
-        $tour_creator = $tpod->get_creator();
+        $tour_creator = $tpod->field('creator');
         $description = bk_tour_description($tpod);
-        $comments = $tpod->get_tour_comments();
+        $comments = $tpod->field('tour_comments');
         if (is_array($tourlast) && array_key_exists($tid, $tourlast)) {
             $last_time_postid = $tourlast[$tid];
-            $lt_pod = new BikeClubRide($last_time_postid);
-            $last_time = $lt_pod->get_ride_date();
+            $lt_pod = pods('ride', $last_time_postid);
+            $last_time = $lt_pod->field('ride_date');
             $last_time_link = '<a href="' . get_site_url() . '/ride/' . $last_time_postid . '/">' . $last_time . '</a>';
         }
         else {
@@ -4230,7 +4230,7 @@ function bike_tour_list_func($atts)
             $ridden_count = $tourcnt[$tid];
         else
             $ridden_count = 0;
-        $cue = bike_cue_links($tpod->get_cue_sheet_number(), $tpod->get_tour_number(), $tpod->get_tour_map() );
+        $cue = bike_cue_links($tpod->field('cue_sheet_number'), $tpod->field('tour_number'), $tpod->field('tour_map') );
         if ($ttype == 0)
             $tour_type =  'Road';
         else
@@ -4238,7 +4238,7 @@ function bike_tour_list_func($atts)
         $ret .= '
           <tr>
             <td>' . $tourno . '</td>
-            <td><a href="' . get_site_url() . '/tour/?p=' . $tid . '">' . $tpod->get_post_title(true) . $hazards . '</a></td>
+            <td><a href="' . get_site_url() . '/tour/?p=' . $tid . '">' . $tpod->display('post_title') . $hazards . '</a></td>
             <td>' . $startloc . '</td>
             <td>' . $miles . '</td>
             <td>' . $terrain_link . '</td>
@@ -4301,7 +4301,7 @@ function bike_pmpro_level_cost_text($text, $level) {
     // is livel is free do nothing
     if (pmpro_isLevelFree($level)) {
         return "";
-        // else is different to free do this 
+        // else is different to free do this
     } else {
         //the full string is : The price for membership is $0.00 now.
         $restituisci = str_replace("now.","",$text); // in this case you can remove "now." in the full string
@@ -4309,7 +4309,7 @@ function bike_pmpro_level_cost_text($text, $level) {
     }
 }
 add_filter("pmpro_level_cost_text", "bike_pmpro_level_cost_text", 10, 2);
-add_filter( 'wpmu_signup_user_notification', '__return_false' ); 
+add_filter( 'wpmu_signup_user_notification', '__return_false' );
 
 add_filter( 'comment_form_defaults', 'bike_rich_text_comment_form' );
 function bike_rich_text_comment_form( $args ) {
@@ -4319,13 +4319,13 @@ function bike_rich_text_comment_form( $args ) {
 		'textarea_rows' => '10', // re-size text area
 		'dfw' => false, // replace the default full screen with DFW (WordPress 3.4+)
 		'tinymce' => array(
-        	'theme_advanced_buttons1' => 'bold,italic,underline,strikethrough,bullist,numlist,code,blockquote,link,unlink,outdent,indent,|,undo,redo,fullscreen',
+		'theme_advanced_buttons1' => 'bold,italic,underline,strikethrough,bullist,numlist,code,blockquote,link,unlink,outdent,indent,|,undo,redo,fullscreen',
 	        'theme_advanced_buttons2' => '', // 2nd row, if needed
-        	'theme_advanced_buttons3' => '', // 3rd row, if needed
-        	'theme_advanced_buttons4' => '' // 4th row, if needed
-  	  	),
+		'theme_advanced_buttons3' => '', // 3rd row, if needed
+		'theme_advanced_buttons4' => '' // 4th row, if needed
+		),
 		'quicktags' => array(
- 	       'buttons' => 'strong,em,link,block,del,ins,img,ul,ol,li,code,close'
+	       'buttons' => 'strong,em,link,block,del,ins,img,ul,ol,li,code,close'
 	    )
 	) );
 	$args['comment_field'] = ob_get_clean();
@@ -4398,7 +4398,7 @@ function bk_test_getusers()
 	$context = stream_context_create($options);
 	$result = file_get_contents($url, false, $context);
     return $result;
-} 
+}
 add_shortcode('bk_test_getusers', 'bk_test_getusers');
 
 function truncate($string, $length)
@@ -4422,7 +4422,7 @@ function bk_signinsheet_func()
 	wp_redirect(home_url());
 	die();
     }
-    $rpod = new BikeClubRide($rideid);
+    $rpod = pods('ride', $rideid);
     if (empty($rpod)) {
 	wp_redirect(home_url());
 	die();
@@ -4440,24 +4440,24 @@ function bk_signinsheet_func()
         $linesin[$idx] = "{MEMBER_CELL_FONE_$i}";
         $linesout[$idx++] = "____________________________";
     }
-    $pod = new BikeClubClubSettings();
-    $signinsheet = $pod->get_signin_sheet();
-	$tourfield = $rpod->get_tour();
+    $pod = pods('club-settings');
+    $signinsheet = $pod->field('signin_sheet');
+	$tourfield = $rpod->field('tour');
     $tourid = $tourfield['ID'];
-	$tpod = new BikeClubTour($tourid);
-	$ridename = $tpod->get_post_title();
-	$ridemiles = $tpod->get_miles();
-	$tourid = $tpod->get_tour_number();
-	$tour_climb = $tpod->get_climb();
-    $startpoint = $tpod->get_start_point(true);
-	$pace = $rpod->get_pace(true);
+	$tpod = pods('tour', $tourid);
+	$ridename = $tpod->field('post_title');
+	$ridemiles = $tpod->field('miles');
+	$tourid = $tpod->field('tour_number');
+	$tour_climb = $tpod->field('climb');
+    $startpoint = $tpod->display('start_point');
+	$pace = $rpod->display('pace');
 	$tz = new DateTimeZone(wp_timezone_string());
-	$date_obj = new DateTime($rpod->get_ride_date(true) . ' ' . $rpod->get_time(true), $tz);
+	$date_obj = new DateTime($rpod->display('ride_date') . ' ' . $rpod->display('time'), $tz);
 	$date = $date_obj->format("m/d/Y");
 	$time = $date_obj->format("h:i a");
-    $rl = $rpod->get_ride_leader();
-    $safetypod = new BikeClubRole(13260); // it coordinator
-    $safety_coord = $safetypod->get_member();
+    $rl = $rpod->field('ride_leader');
+    $safetypod = pods('role', 13260); // it coordinator
+    $safety_coord = $safetypod->field('member');
     $safetyid = $safety_coord['ID'];
     $safety_info = get_user_meta($safetyid);
     $safetycoord['first_name'] =  $safety_info['first_name'][0];
@@ -4473,7 +4473,7 @@ function bk_signinsheet_func()
     $rideleader['cell_fone'] = strip_tags(xprofile_get_field_data('Mobile Phone', $rlid));
     $rideleader['emergency_phone'] = strip_tags(xprofile_get_field_data('Emergency Number', $rlid));
     $rideleader['car_license'] = xprofile_get_field_data('Vehicle License', $rlid);
-	$attendees = get_post_meta($rpod->get_ID(), '_pods_attendees', true);
+	$attendees = get_post_meta($rpod->field('ID'), '_pods_attendees', true);
 	$idx = 0;
 	$i = 0;
 	if (!empty($attendees)) {
@@ -4497,7 +4497,7 @@ function bk_signinsheet_func()
 			    $wait_listed = 0;
             if ($status == "No" || $wait_listed > 0)
                 continue;
-            $user = new BikeClubUser($userid);
+            $user = pods('user', $userid);
 			$car_license = get_post_meta($attendeeid, 'car_license', true);
 			$emergency_phone = get_post_meta($attendeeid, 'emergency_phone', true);
 			$cell_phone = get_post_meta($attendeeid, 'cell_phone', true);
@@ -4516,7 +4516,7 @@ function bk_signinsheet_func()
                 // Member Status
 			    $linesout[$idx++] = '<u>M</u>';
                 // Member Name
-				$linesout[$idx] = $user->get_display_name();
+				$linesout[$idx] = $user->field('display_name');
 				if ($status === "Maybe")
 				    $linesout[$idx] .= '?';
 			    $idx++;
@@ -4540,7 +4540,7 @@ function bk_signinsheet_func()
 			}
 		}
 	}
-    $guests = $rpod->get_guests();
+    $guests = $rpod->field('guests');
 	if (!empty($guests)) {
 	    foreach ($guests as $guest) {
             $guestid = $guest['ID'];
@@ -4602,7 +4602,7 @@ function bk_test_cue_generation()
     $dompdf->set_option('enable_remote', TRUE);
 	$dompdf->loadHtml($contents);
 	$dompdf->setPaper('A4', 'portrait');
-    $dompdf->setBasePath(realpath('../../uploads')); 
+    $dompdf->setBasePath(realpath('../../uploads'));
 	$dompdf->render();
     $file_to_save = get_home_path() . "wp-content/cue127.pdf";
     file_put_contents($file_to_save, $dompdf->output());
@@ -4659,29 +4659,29 @@ function bk_remove_from_other_rides($userid, $rideid, $wl_move = 0)
 			$userid = get_post_field('post_author', $aid);
 			if (empty($userid) || $userid == 0)
 			    continue;
-			$apod = new BikeClubRideAttendee($aid);
-			$ra_status = $apod->get_ride_attendee_status();
-			$ride = $apod->get_ride();
+			$apod = pods('ride-attendee', $aid);
+			$ra_status = $apod->field('ride_attendee_status');
+			$ride = $apod->field('ride');
 			$cur_ride_id = !empty($ride) ? $ride['ID'] : 0;
 			// error_log("aid:" . $aid . " cur_rideid:" . $cur_ride_id . " rideid:" . $rideid);
 			if ($cur_ride_id > 0 && $rideid != $cur_ride_id) {
-		        $rpod = new BikeClubRide($cur_ride_id);
-	            $upod = new BikeClubUser(get_current_user_id());
+		        $rpod = pods('ride', $cur_ride_id);
+	            $upod = pods('user', get_current_user_id());
 				// error_log("removing aid:" . $aid);
 		        $upod->remove_from('rides', $aid);
 				if ($ra_status != "No") {
-			        $wlnum = $apod->get_wait_list_number();
+			        $wlnum = $apod->field('wait_list_number');
 					if ($wlnum > 0) {
-                        $apod->set_wait_list_number(0);
+                        $apod->save('wait_list_number', 0);
 					}
 					else if ($wl_move != 0) {
                         $wlapod = bk_find_wl_apod($rpod);
 				        if ($wlapod) {
 					        bk_move_from_waitlist($rpod, $wlapod);
-                            bk_attendee_list_change( $rpod, $wlapod->get_ID() );
+                            bk_attendee_list_change( $rpod, $wlapod->field('ID') );
 						}
 					}
-                    $apod->set_ride_attendee_status("No");
+                    $apod->save('ride_attendee_status', "No");
 				}
 			}
 		}
@@ -4717,46 +4717,46 @@ function bk_attended_ride_table($userid = 0)
 			$userid = get_post_field('post_author', $aid);
 			if (empty($userid) || $userid == 0)
 			    continue;
-		    $apod = new BikeClubRideAttendee($aid);
-		    $ride = $apod->get_ride();
+		    $apod = pods('ride-attendee', $aid);
+		    $ride = $apod->field('ride');
 		    if (!empty($ride) && $ride['ID'] > 0) {
 				$rideid = $ride['ID'];
-		        $rpod = new BikeClubRide($rideid);
-                if ($rpod->get_ride_status() == 0) {
-			        $wlnum = $apod->get_wait_list_number();
+		        $rpod = pods('ride', $rideid);
+                if ($rpod->field('ride-status') == 0) {
+			        $wlnum = $apod->field('wait_list_number');
 					if (!empty($wlnum) && $wlnum > 0)
 					    $note = "*";
 					else
 					    $note = "";
                     $tz = new DateTimeZone(wp_timezone_string());
 					$ret .= '<tr>';
-                    $ride_date = $rpod->get_ride_date(true);
+                    $ride_date = $rpod->display('ride_date');
 		            $ptpage = '<a href="#" class="pace-terrain">';
-		            $pace = $ptpage . $rpod->get_pace(true) . '</a>';
+		            $pace = $ptpage . $rpod->display('pace') . '</a>';
                     $dow_obj = new DateTime($ride_date, $tz);
                     $dow = $dow_obj->format("l");
 	                $ride_date = $dow . ", " . $ride_date;
-                    $start_time = $rpod->get_time(true);
-                    $tourfield = $rpod->get_tour();
+                    $start_time = $rpod->display('time');
+                    $tourfield = $rpod->field('tour');
 					if (null !== $tourfield) {
                         $tourid = $tourfield['ID'];
-                        $tpod = new BikeClubTour($tourid);
-		                $tour = '<a href="' . get_site_url() . '/ride/' . $rideid . '">' . $tpod->get_tour_number() . ' - ' . $tpod->get_post_title() . '</a>';
+                        $tpod = pods('tour', $tourid);
+		                $tour = '<a href="' . get_site_url() . '/ride/' . $rideid . '">' . $tpod->field('tour_number') . ' - ' . $tpod->field('post_title') . '</a>';
 					}
 					else {
 						$tour = "";
 					}
-                    $start = $tpod->get_start_point();
-                    $rl = $rpod->get_ride_leader();
+                    $start = $tpod->field('start_point');
+                    $rl = $rpod->field('ride_leader');
                     $rlid = $rl['ID'];
-                    $rlpod = new BikeClubUser($rlid);
-                    $leader = $rlpod->get_display_name();
-		            $rluname = $rlpod->get_user_nicename();
-		            $rlname = $rlpod->get_display_name();
+                    $rlpod = pods('user', $rlid);
+                    $leader = $rlpod->field('display_name');
+		            $rluname = $rlpod->field('user_nicename');
+		            $rlname = $rlpod->field('display_name');
 		            $ride_leader = '<a href="' . get_site_url() . '/members/' . $rluname . '/profile/">' . $rlname . '</a>';
 					if ( $start ) {
-                    	$url = get_site_url() . '/start_point/' . $start['post_name'] . '/';
-                    	$startloc = '<a href="' . esc_url($url) . '">' . $start['post_title'] . '</a>';
+			$url = get_site_url() . '/start_point/' . $start['post_name'] . '/';
+			$startloc = '<a href="' . esc_url($url) . '">' . $start['post_title'] . '</a>';
 					}
 					else {
 						$startloc = "";
@@ -4780,9 +4780,9 @@ function bk_attended_ride_table($userid = 0)
 function bk_get_attended_rides($userid, $cur_ride_id = 0)
 {
 	if ($cur_ride_id > 0) {
-	    $rpod = new BikeClubRide($cur_ride_id);
-        $ride_date = $rpod->get_ride_date(true);
-        $start_time = $rpod->get_time(true);
+	    $rpod = pods('ride', $cur_ride_id);
+        $ride_date = $rpod->display('ride_date');
+        $start_time = $rpod->display('time');
 	    $tz = new DateTimeZone(wp_timezone_string());
 	    $ridestart = new DateTime($ride_date . ' ' . $start_time, $tz);
 	    $min_time = clone $ridestart;
@@ -4792,8 +4792,8 @@ function bk_get_attended_rides($userid, $cur_ride_id = 0)
 	    $max_time->add($interval);
 	}
 	$ret = array();
-	$upod = new BikeClubUser($userid);
-	$attendees = $upod->get_rides();
+	$upod = pods('user', $userid);
+	$attendees = $upod->field('rides');
 	// error_log("cur_ride_id:" . $cur_ride_id);
 	if (!empty($attendees)) {
 	    foreach ($attendees as $attendee) {
@@ -4804,16 +4804,16 @@ function bk_get_attended_rides($userid, $cur_ride_id = 0)
             $auserid = get_post_field('post_author', $aid);
 			if (empty($userid) || $userid == 0 || $auserid != $userid)
 			    continue;
-			$apod = new BikeClubRideAttendee($aid);
-			$ra_status = $apod->get_ride_attendee_status();
-			$ride = $apod->get_ride();
+			$apod = pods('ride-attendee', $aid);
+			$ra_status = $apod->field('ride_attendee_status');
+			$ride = $apod->field('ride');
 			$rideid = !empty($ride) ? $ride['ID'] : 0;
 			// error_log("rideid:" . $rideid . " ra_status:" . $ra_status);
 			if ($rideid > 0 && $rideid != $cur_ride_id) {
-		        $rpod = new BikeClubRide($rideid);
+		        $rpod = pods('ride', $rideid);
 			    if ($ra_status != "No") {
-                    $ride_date = $rpod->get_ride_date(true);
-                    $start_time = $rpod->get_time(true);
+                    $ride_date = $rpod->display('ride_date');
+                    $start_time = $rpod->display('time');
 	                $tz = new DateTimeZone(wp_timezone_string());
 				    $ridestart = new DateTime($ride_date . ' ' . $start_time, $tz);
 	                // $mintime = new DateTime("now + 2 hours", $tz);
@@ -4832,7 +4832,7 @@ function bk_get_attended_rides($userid, $cur_ride_id = 0)
 			    }
 			    else {
 				    $upod->remove_from('rides', $aid);
-                    // $apod->set_ride_attendee_status("No");
+                    // $apod->save('ride_attendee_status', "No");
 			    }
 			}
 		}
@@ -4849,7 +4849,7 @@ function bk_attended_rides($atts)
 	$ret = "";
 	if(!empty($atts['user']) && is_numeric($atts['user'])) {
 		$userid = !empty($atts['user']) ? $atts['user'] : get_current_user_id();
-		$pod = new BikeClubUser($userid);
+		$pod = pods('user', $userid);
 	    $attendees = bk_get_attended_rides($userid);
 		if (!empty($attendees)) {
 		    foreach ($attendees as $attendee) {
@@ -4860,12 +4860,12 @@ function bk_attended_rides($atts)
 			    $userid = get_post_field('post_author', $aid);
 			    if (empty($userid) || $userid == 0)
 			        continue;
-			    $apod = new BikeClubRideAttendee($aid);
-			    $ride = $apod->get_ride();
+			    $apod = pods('ride-attendee', $aid);
+			    $ride = $apod->field('ride');
 			    if (!empty($ride) && $ride['ID'] > 0) {
-			        $rpod = new BikeClubRide($ride['ID']);
-                    $ride_date = $rpod->get_ride_date(true);
-                    $start_time = $rpod->get_time(true);
+			        $rpod = pods('ride', $ride['ID']);
+                    $ride_date = $rpod->display('ride_date');
+                    $start_time = $rpod->display('time');
 	                $tz = new DateTimeZone(wp_timezone_string());
 			        $ret .= '<a href="' . get_site_url() . '/ride/' . $ride['ID'] . '">' . $ride_date . ' ' . $start_time . '</a><br />';
 			    }
@@ -4877,8 +4877,8 @@ function bk_attended_rides($atts)
 add_shortcode('safety-coordinator', 'mafw_safety_coordinator');
 function mafw_safety_coordinator()
 {
-    $rpod = new BikeClubRide(17234 );
-    $rl = $rpod->get_ride_leader();
+    $rpod = pods('ride', 17234 );
+    $rl = $rpod->field('ride_leader');
     $rlid = $rl['ID'];
     $rl_info = get_user_meta($rlid);
     $rideleader['first_name'] =  $rl_info['first_name'][0];
@@ -4901,7 +4901,7 @@ function bk_display_contacts_func()
     </tr>
     </thead>
     </tbody>';
-    $pod = new BikeClubRole();
+    $pod = pods('role');
     $params = array(
        'orderby' => 'index.meta_value',
        'limit' => -1
@@ -4909,21 +4909,21 @@ function bk_display_contacts_func()
     $pod->find($params);
     if (0 < $pod->total()) {
         while ($pod->fetch()) {
-           $title = $pod->get_post_title();
+           $title = $pod->field('post_title');
            if (!current_user_can('active') ) {
                      if ( $title != "President" && FALSE === strpos($title, "Membership Coordinator") && $title != "Ride Coordinator" )
                               continue;
            }
            $ret .= '<tr>';
            $ret .= '<td>' . $title . '</td>';
-	       $user = $pod->get_member();
+	       $user = $pod->field('member');
 	       if (current_user_can('active')) {
 		       $ret .= '<td><a href="' . get_site_url() . '/members/' . $user['user_nicename'] . '/profile/">' . $user['display_name'] . '</a></td>';
-               $ret .= '<td><a href="tel:' . $pod->get_telephone() . '">' . $pod->get_telephone() . '</a></td>';
+               $ret .= '<td><a href="tel:' . $pod->field('telephone') . '">' . $pod->field('telephone') . '</a></td>';
 	       }
 	       else
 		       $ret .= '<td>' . $user['display_name'] . '</td>';
-	       $ret .= '<td><a href="mailto:' . $pod->get_email() . '" target="_blank">' . $pod->get_email() . '</a></td>';
+	       $ret .= '<td><a href="mailto:' . $pod->field('email') . '" target="_blank">' . $pod->field('email') . '</a></td>';
            $ret .= '</tr>';
         }
     }
@@ -4983,11 +4983,11 @@ function bike_custom_admin_css() {
 function replace_howdy( $wp_admin_bar ) {
     $my_account=$wp_admin_bar->get_node('my-account');
 	if ( is_object( $my_account ) ) {
-    	$newtitle = str_replace( 'Howdy,', 'Logged in as', $my_account->title );            
-    	$wp_admin_bar->add_node( array(
-        	'id' => 'my-account',
-        	'title' => $newtitle,
-    	) );
+	$newtitle = str_replace( 'Howdy,', 'Logged in as', $my_account->title );
+	$wp_admin_bar->add_node( array(
+		'id' => 'my-account',
+		'title' => $newtitle,
+	) );
 	}
 }
 add_filter( 'admin_bar_menu', 'replace_howdy',25 );
@@ -5042,11 +5042,11 @@ function bk_mce_buttons_2( $buttons ) {
 	return $buttons;
 }
 add_filter( 'mce_buttons_2', 'bk_mce_buttons_2' );
- 
+
 //loads script to do the oembed stuff
 function bk_alt_lab_front_end_scripts(){
-    wp_enqueue_editor();        
-    wp_enqueue_script( 'mce-view', '', array('tiny_mce') ); 
+    wp_enqueue_editor();
+    wp_enqueue_script( 'mce-view', '', array('tiny_mce') );
 }
 // add_action( 'wp_enqueue_scripts', 'bk_alt_lab_front_end_scripts' );
 
@@ -5054,7 +5054,7 @@ function bk_alt_lab_front_end_scripts(){
 
 // function bk_disable_apm_plugi_nag_for_users( $user_id ) {
     // $user_id = absint( $user_id );
-            
+
     // if ( $user_id && intval( $user_id ) > 0  && current_user_can('install_plugins')) {
         // update_user_meta( $user_id, '_tribe_apm_plugin_nag', true );
     // }
@@ -5104,7 +5104,7 @@ function bk_change_membership_end_date($user_id)
 // add_shortcode('bk-leader-members', 'bk_rideleader_members');
 function bk_rideleader_members()
 {
-    $leaders = [ 
+    $leaders = [
 1,
 2893,
 2896,
@@ -5223,9 +5223,9 @@ function bk_rideleader_members()
     $msg = "";
 	foreach ($leaders as $user_id) {
         $user_info = get_userdata($user_id);
-	    $upod = new BikeClubUser($user_id);
-	    $email = $upod->get_ride_leader_email();
-		$upod->set_ride_leader_email($user_info->user_email);
+	    $upod = pods('user', $user_id);
+	    $email = $upod->field('ride_leader_email');
+		$upod->save('ride_leader_email', $user_info->user_email);
         $msg .= $user_info->user_email . "<br />";
 	}
 	return $msg;
@@ -5235,7 +5235,7 @@ add_shortcode('bk-dual-members', 'bk_dual_members');
 function bk_dual_members()
 {
 	global $wpdb;
-$members = [ 
+$members = [
 3055,
 3250,
 3316,
@@ -5293,8 +5293,8 @@ $members = [
 ];
 	$msg = "";
 	foreach ($members as $user_id) {
-	    $upod = new BikeClubUser($user_id);
-	    $dual_members = $upod->get_dual_member();
+	    $upod = pods('user', $user_id);
+	    $dual_members = $upod->field('dual_member');
 		$enddate = "0";
 		$user = false;
 		$dual_member_uid = 0;;
@@ -5318,8 +5318,8 @@ $members = [
 function bk_expire_dual_member($user_id)
 {
 	global $wpdb;
-	$upod = new BikeClubUser($user_id);
-	$dual_members = $upod->get_dual_member();
+	$upod = pods('user', $user_id);
+	$dual_members = $upod->field('dual_member');
     if (!empty($dual_members)) {
 	    $dual_member_uid = $dual_members['ID'];
 		if ($dual_member_uid > 0) {
@@ -5327,9 +5327,9 @@ function bk_expire_dual_member($user_id)
 		    if ($user) {
                 $user->remove_role('active');
 				$query = "SELECT id FROM {$wpdb->pmpro_memberships_users} WHERE user_id = " . $dual_member_uid . " AND status = 'active'";
-        		$results = $wpdb->get_results($query);
-	    		if ($results) {
-		    		$uid = $results[0]->id;
+			$results = $wpdb->get_results($query);
+			if ($results) {
+				$uid = $results[0]->id;
 		            $sqlQuery = "UPDATE {$wpdb->pmpro_memberships_users} SET enddate = current_date(), status = 'inactive', membership_id = 0 WHERE id = " . $uid;
 				}
 			}
@@ -5342,8 +5342,8 @@ function bike_after_checkout($user_id)
 	global $wpdb;
 	$level = pmpro_getMembershipLevelForUser($user_id);
 	if (pmpro_hasMembershipLevel(array('4','5','6'), $user_id ) ) {
-	    $upod = new BikeClubUser($user_id);
-	    $dual_members = $upod->get_dual_member();
+	    $upod = pods('user', $user_id);
+	    $dual_members = $upod->field('dual_member');
         if (!empty($dual_members)) {
 		    $dual_member_uid = $dual_members['ID'];
 	        $query = "SELECT enddate, membership_id FROM {$wpdb->pmpro_memberships_users} WHERE user_id = " . $user_id . " AND status = 'active'";
@@ -5366,8 +5366,8 @@ function bike_after_checkout($user_id)
 			}
 		    $sqlQuery = "UPDATE {$wpdb->pmpro_memberships_users} SET enddate = '" . $result->enddate . "', billing_amount = 0, status = 'active', membership_id = " . $result->membership_id . " WHERE id = " . $uid;
 			$wpdb->query($sqlQuery);
-	        $dm_upod = new BikeClubUser($dual_member_uid);
-			$dm_upod->set_dual_member($user_id);
+	        $dm_upod = pods('user', $dual_member_uid);
+			$dm_upod->save('dual_member', $user_id);
 		}
 	}
 }
@@ -5425,13 +5425,13 @@ function bk_end_members_dir_buffering() {
 
 add_action( 'bp_after_directory_members', 'bk_end_members_dir_buffering', 100001 );
 
-function bk_hide_profile_edit( $retval ) {	
+function bk_hide_profile_edit( $retval ) {
     $retval['exclude_fields'] = '20';
 	if (bp_is_user_profile_edit())
         $retval['exclude_fields'] = '115';
 	// if (bp_is_profile_edit())
         // $retval['exclude_fields'] = '115';
-	return $retval;	
+	return $retval;
 }
 add_filter( 'bp_after_has_profile_parse_args', 'bk_hide_profile_edit' );
 
@@ -5444,7 +5444,7 @@ function bk_add_toolbar_items($admin_bar){
         'title' => $title,
         'href'  => get_site_url() . '/membership-account',
         'meta'  => array(
-            'title' => __('My Account'),            
+            'title' => __('My Account'),
         ),
     ));
     $admin_bar->add_menu( array(
@@ -5453,7 +5453,7 @@ function bk_add_toolbar_items($admin_bar){
         'title' => 'My Account',
         'href'  => get_site_url() . '/membership-account',
         'meta'  => array(
-            'title' => __('My Account'),            
+            'title' => __('My Account'),
         ),
     ));
     $admin_bar->add_menu( array(
@@ -5462,7 +5462,7 @@ function bk_add_toolbar_items($admin_bar){
         'title' => 'Help',
         'href'  => '/website-user-guides',
         'meta'  => array(
-            'title' => __('Help'),            
+            'title' => __('Help'),
         ),
     ));
 }
@@ -5517,7 +5517,7 @@ function bk_club_member_addresses()
 	$ret = "";
     if(!current_user_can('manage_options') && !current_user_can('treasurer'))
 	    return $ret;
-	
+
       $ret = '<table class="display club-members-table" style="width:100%">
         <thead>
             <tr>
@@ -5561,7 +5561,7 @@ function bk_club_member_report()
 	    return $ret;
     if(!current_user_can('manage_options') && !current_user_can('safetycoordinator') && !current_user_can('president') && !current_user_can('president_elect') && !current_user_can('ridecoordinator') && !current_user_can('membercoordinator') && !current_user_can('treasurer'))
 	    return $ret;
-	
+
       $ret = '<table class="display club-members-table" style="width:100%">
         <thead>
             <tr>
@@ -5747,26 +5747,26 @@ function bk_member_ride_report()
         while ($query->have_posts()) {
             $query->the_post();
             $post_id = get_the_ID();
-            $pod = new BikeClubRide($post_id);
-            $ridestatus = $pod->get_ride_status();
-            $tourfield = $pod->get_tour();
+            $pod = pods('ride', $post_id);
+            $ridestatus = $pod->field('ride-status');
+            $tourfield = $pod->field('tour');
             if ($tourfield) {
                 $tourid = $tourfield['ID'];
-                $tpod = new BikeClubTour($tourid);
-                $miles = intval($tpod->get_miles());
-                $climb = intval($tpod->get_climb());
+                $tpod = pods('tour', $tourid);
+                $miles = intval($tpod->field('miles'));
+                $climb = intval($tpod->field('climb'));
 			}
 		    if ($ridestatus == 4 && $miles > 0)  {
 	            $riders = bk_get_signup_id_list($pod);
 				foreach ($riders as $riderId) {
 					if (array_key_exists($riderId, $totalmileage)) {
-			           	$totalmileage[$riderId] += $miles;
-			           	$totalclimb[$riderId] += $climb;
+					$totalmileage[$riderId] += $miles;
+					$totalclimb[$riderId] += $climb;
 						$totalrides[$riderId]++;
 					}
 					// else {
-			           	// $totalmileage[$riderId] = $miles;
-			           	// $totalclimb[$riderId] = $climb;
+					// $totalmileage[$riderId] = $miles;
+					// $totalclimb[$riderId] = $climb;
 						// $totalrides[$riderId] = 1;
 					// }
 				}
@@ -5816,7 +5816,7 @@ function bk_proposed_ride_signup_report()
         while ($query->have_posts()) {
             $query->the_post();
             $post_id = get_the_ID();
-			$pod = new BikeClubChosenProposedRide($post_id);
+			$pod = pods('chosen_proposed_ride', $post_id);
 			$author_pid = get_post_meta($post_id, 'submittor', true);
 			$rlid = get_post_meta($post_id,'ride_leader', true);
 			$rideid = get_post_meta($post_id,'ride', true);
@@ -5824,20 +5824,20 @@ function bk_proposed_ride_signup_report()
 		    $authorname = $user_info->display_name;
             $user_info = get_userdata($rlid);
 		    $rlname = $user_info->display_name;
-			$rpod = new BikeClubRide($rideid);
-			$postdate = $rpod->get_post_date(true);
-			$ridedate = $rpod->get_ride_date();
+			$rpod = pods('ride', $rideid);
+			$postdate = $rpod->display("post_date");
+			$ridedate = $rpod->field("ride_date");
 	        $tz = new DateTimeZone(wp_timezone_string());
 	        $ridestart = new DateTime($ridedate, $tz);
             $url = get_site_url() . '/ride/' . $rideid . '/';
 	        $ridelink = '<a href="' . $url . '/">' . $url . '</a>';
-			if ($rpod->get_ride_status() == 4) {
-            	$ret .= '<tr>';
-            	$ret .= '<td>' . $rlname . '</td>';
-            	$ret .= '<td>' . $postdate . '</td>';
-            	$ret .= '<td>' . $ridedate . '</td>';
-            	$ret .= '<td>' . $ridelink . '</td>';
-	        	$ret .= '</tr>';
+			if ($rpod->field('ride-status') == 4) {
+		$ret .= '<tr>';
+		$ret .= '<td>' . $rlname . '</td>';
+		$ret .= '<td>' . $postdate . '</td>';
+		$ret .= '<td>' . $ridedate . '</td>';
+		$ret .= '<td>' . $ridelink . '</td>';
+			$ret .= '</tr>';
 			}
         }
     }
@@ -5901,28 +5901,28 @@ function bk_ride_leader_report()
         while ($query->have_posts()) {
             $query->the_post();
             $post_id = get_the_ID();
-            $pod = new BikeClubRide($post_id);
-            $leaderId = $pod->get_ride_leader();
+            $pod = pods('ride', $post_id);
+            $leaderId = $pod->field('ride_leader');
 	        $post_author = get_post_field('post_author', $post_id);
 			$ridercount = 0;
             if (is_array($leaderId))
                 $leaderId = $leaderId['ID'];
             if (!empty($leaderId) && $leaderId != 0) {
-                $ridestatus = $pod->get_ride_status();
-                $ridercount = intval($pod->get_rider_count());
-			$tourfield = $pod->get_tour();
+                $ridestatus = $pod->field('ride-status');
+                $ridercount = intval($pod->field('rider_count'));
+			$tourfield = $pod->field('tour');
 				// if ($leaderId != $post_author && $ridestatus == 4) {
-    				// $user_info = get_userdata($post_author);
+				// $user_info = get_userdata($post_author);
 					// error_log("rideid:" . $post_id . " author:" . $user_info->user_nicename);
 				// }
 				if ($tourfield) {
-    			    $tourid = $tourfield['ID'];
-			    $tpod = new BikeClubTour($tourid);
-					$miles = intval($tpod->get_miles());
+			    $tourid = $tourfield['ID'];
+			    $tpod = pods('tour', $tourid);
+					$miles = intval($tpod->field('miles'));
 				}
 				else
 					$miles = 0;
-                // $datestr = $pod->get_ride_date(true) . ' ' . $pod->get_time(true);
+                // $datestr = $pod->display('ride_date') . ' ' . $pod->display('time');
                 // $tz = new DateTimeZone(wp_timezone_string());
                 // $start_time = DateTime::createFromFormat("m/d/Y h:i a", $datestr, $tz);
 				// if ($ridestatus != 2 || ride_leadercheck($start_time, $leaderId) == 0) {
@@ -6267,7 +6267,7 @@ function bk_check_leaders()
     return $ret;
 }
 
-// add_action('plugins_loaded', 'my_remove_dcfe_action', 11); 
+// add_action('plugins_loaded', 'my_remove_dcfe_action', 11);
 // function my_remove_dcfe_action() {
     // remove_action('admin_notices', 'dynamic_content_for_elementor_promo');
 // }
@@ -6353,13 +6353,13 @@ add_shortcode('bk-nl-link', 'bk_nl_link_func');
 function bk_nl_link_func()
 {
     $args=array(
-        'orderby' => array( 'date' => 'DESC' ),   
+        'orderby' => array( 'date' => 'DESC' ),
 		'no_found_rows' => true,
         'limit' => 1,
         'post_type' => 'post',
         'tax_query' => array(
          array(
-            'taxonomy' => 'category', 
+            'taxonomy' => 'category',
             'field'    => 'id',
             'terms'    => 342,
         ),
@@ -6370,11 +6370,11 @@ function bk_nl_link_func()
          $wp_query->the_post();
          $post_id = get_the_ID();
          $post = get_post($post_id);
-    	 $ret = '<a href="' . get_permalink($post_id) . '">';
+	 $ret = '<a href="' . get_permalink($post_id) . '">';
          $str = get_transient('bk_nl_announcement_subject');
 
          $str = "Click here to see the " . $str . " Announcement";
-    	 $ret .= $str . '</a>';
+	 $ret .= $str . '</a>';
          return $ret;
     }
     return "";
@@ -6383,8 +6383,8 @@ add_shortcode('bk-edit-ride', 'bk_edit_ride');
 function bk_edit_ride()
 {
     $rideid = get_query_var('rideid', null);
-    $ridepod = new BikeClubRide($rideid );
-    $userid = $ridepod->get_ride_leader();
+    $ridepod = pods( 'ride', $rideid );
+    $userid = $ridepod->field('ride_leader');
     if ($userid == get_current_user_id() || user_can(get_current_user_id(), 'edit_ride_schedule')) {
         $fields = array( 'ride-status', 'ride_date', 'time', 'tour', 'pace', 'ride_leader', 'ride_comments', 'rider_count', 'ride_leader_pace');
         return $ridepod->form( $fields );
@@ -6399,11 +6399,11 @@ function bk_edit_start_point()
 	    $startid = intval($_GET['startid']);
     else
 	    return "";
-    $stpod = new BikeClubStartPoint($startid );
+    $stpod = pods( 'start_point', $startid );
     if (empty($stpod))
         return "";
     $fields = array( 'post_title', 'start-county', 'state', 'longitude', 'latitude', 'directions', 'active');
-    return $stpod->form($fields);    
+    return $stpod->form($fields);
 }
 add_shortcode('bk-edit-tour', 'bk_edit_tour');
 function bk_edit_tour()
@@ -6412,25 +6412,25 @@ function bk_edit_tour()
 	    $tourid = $_GET['tourid'];
     else
 	    return "";
-    $tourpod = new BikeClubTour($tourid );
+    $tourpod = pods( 'tour', $tourid );
     if ($tourid <= 0 || empty($tourpod))
 	return "";
     $fields = array( 'tour_number', 'post_title', 'tour_description', 'vimeo', 'tour_comments', 'tour-terrain', 'start_point', 'miles', 'climb', 'tour_type', 'tour_map', 'cue_sheet', 'active');
-    return $tourpod->form( $fields ); 
+    return $tourpod->form( $fields );
 }
 add_shortcode('bk-add-start-point', 'bk_add_start_point');
 function bk_add_start_point()
 {
-    $startptpod = new BikeClubStartPoint();
+    $startptpod = pods( 'start_point' );
     $fields = array('post_title', 'start-county', 'state', 'longitude', 'latitude', 'active' => array( 'default' => 1 ), 'directions');
-    return $startptpod->form( $fields ); 
+    return $startptpod->form( $fields );
 }
 add_shortcode('bk-add-tour', 'bk_add_tour');
 function bk_add_tour()
 {
-    $tourpod = new BikeClubTour();
+    $tourpod = pods( 'tour' );
     $fields = array( 'post_title', 'active' => array( 'default' => 1 ), 'tour_description', 'vimeo', 'tour_comments', 'tour-terrain', 'start_point', 'miles', 'climb', 'tour_type', 'tour_map', 'cue_sheet');
-    return $tourpod->form( $fields, 'Add Tour', '/?p=X_ID_X'); 
+    return $tourpod->form( $fields, 'Add Tour', '/?p=X_ID_X');
 }
 
 add_shortcode('club-sponsors', 'bk_sponsors');
@@ -6448,19 +6448,19 @@ function bk_sponsors()
              'limit' => -1,
              'where' => 'sponsor-town.slug = "' . $term->slug . '"'
         );
-        $pod = new BikeClubClubSponsor();
+        $pod = pods('club-sponsor');
 		$sponsors = $pod->find($params);
 		$i = 0;
         while( $sponsors->fetch()) {
-			$loc = $sponsors->get_location();
-			$address = $sponsors->get_address();
-			$phone = $sponsors->get_phone();
-            $ret .= '<strong><a href="' . $sponsors->get_website() . '">' . $sponsors->get_post_title() . '</a></strong><br />';
+			$loc = $sponsors->field('location');
+			$address = $sponsors->field('address');
+			$phone = $sponsors->field('phone');
+            $ret .= '<strong><a href="' . $sponsors->field('website') . '">' . $sponsors->field('post_title') . '</a></strong><br />';
 			if (!empty($loc))
                 $ret .= '<a href="' . $loc . '" target="_blank">' . $address . '</a><br />';
 			else
                 $ret .= $address . '<br />';
-            // $ret .= $phone . '<br />'; 
+            // $ret .= $phone . '<br />';
             $ret .= '<a href="tel:' . $phone . '">' . $phone . '</a><br />';
 		}
         $ret .= '<br />';
@@ -6484,35 +6484,35 @@ function bk_sp_weather_func()
     $postid = get_the_ID();
     if (!$postid)
         return $ret;
-    $rpod = new BikeClubRide($postid);
+    $rpod = pods('ride', $postid);
     if (empty($rpod))
         return $ret;
-    $tourfield = $rpod->get_tour();
+    $tourfield = $rpod->field('tour');
     if (empty($tourfield))
         return $ret;
     $tourid = $tourfield['ID'];
-    $tpod = new BikeClubTour($tourid);
+    $tpod = pods('tour', $tourid);
     if (empty($tpod))
         return $ret;
-    $start = $tpod->get_start_point();
+    $start = $tpod->field('start_point');
     if (empty($start))
         return $ret;
     $startid = $start['ID'];
-    $stpod = new BikeClubStartPoint($startid);
+    $stpod = pods('start_point', $startid);
     if (empty($stpod))
         return $ret;
-    $arr = $stpod->get_start_county();
+    $arr = $stpod->field('start-county');
     if (empty($arr))
         return $ret;
     $termid = $arr['term_id'];
     if (!$termid)
         return $ret;
-    $cpod = new BikeClubCounty($termid);
+    $cpod = pods('county', $termid);
     if (empty($cpod))
         return $ret;
-    $weather_code = $cpod->get_weather(true);
+    $weather_code = $cpod->display('weather');
     if ($weather_code != 0) {
-        $ret = '<h2 class="entry-title">Open Weather Map for ' . $stpod->get_post_title() . '</h2>' .
+        $ret = '<h2 class="entry-title">Open Weather Map for ' . $stpod->field('post_title') . '</h2>' .
              do_shortcode('[location-weather id="' . $weather_code . '"]');
     }
     return $ret;
@@ -6520,7 +6520,7 @@ function bk_sp_weather_func()
 
 add_shortcode('bk-update-tours', 'bk_update_tours');
 function bk_update_tours()
-{ 
+{
 $msg = "done";
     return $msg;
 }
@@ -6551,7 +6551,7 @@ function bk_start_points()
         </thead>
         </tbody><?php
     $fields = array('post_title', 'start-county', 'state', 'longitude', 'latitude', 'active' => array( 'default' => 1 ), 'directions');
-    $stpod = new BikeClubStartPoint();
+    $stpod = pods("start_point");
     $params = array(
             'orderby' => 't.post_title',
 		    'limit' => -1
@@ -6559,28 +6559,28 @@ function bk_start_points()
     $stpod->find($params);
     while( $stpod->fetch()) { ?>
           <?php
-              $active_sp = $stpod->get_active(true);
+              $active_sp = $stpod->display('active');
               if ($active_sp == "No" && !$can_edit) continue;
           ?>
           <tr>
             <td><?php
-		          $url = get_site_url() . '/start-point/' . $stpod->get_post_name(true) . '/';
-		          echo '<a href="' . esc_url($url) . '">'  . $stpod->get_post_title(true) . '</a>';
+		          $url = get_site_url() . '/start-point/' . $stpod->display('post_name') . '/';
+		          echo '<a href="' . esc_url($url) . '">'  . $stpod->display('post_title') . '</a>';
 			?> </td>
-            <td><?php echo $stpod->get_start_county(true); ?> </td>
-            <td><?php echo $stpod->get_state(true); ?> </td>
-            <td><?php echo $stpod->get_longitude(true); ?> </td>
-            <td><?php echo $stpod->get_latitude(true); ?> </td>
+            <td><?php echo $stpod->display('start-county'); ?> </td>
+            <td><?php echo $stpod->display('state'); ?> </td>
+            <td><?php echo $stpod->display('longitude'); ?> </td>
+            <td><?php echo $stpod->display('latitude'); ?> </td>
 	        <?php if ($can_edit) { ?>
             <td><?php echo $active_sp; ?> </td>
 			<?php } ?>
-            <td><?php echo $stpod->get_directions	(true); ?> </td>
+            <td><?php echo $stpod->display('directions	'); ?> </td>
             <?php if ($can_edit) {
-              $url = get_site_url() . '/edit-start-point/?startid=' . $stpod->get_ID();
+              $url = get_site_url() . '/edit-start-point/?startid=' . $stpod->field('ID');
               echo '<td><a href="' . esc_url($url) . '">Edit</a></td>';
             }
 			else {
-				$url = get_site_url() . '/start-point/' . $stpod->get_post_name(true) . '/';
+				$url = get_site_url() . '/start-point/' . $stpod->display('post_name') . '/';
 				echo '<td><a href="' . esc_url($url) . '">View</a></td>';
 			}
 			?>
@@ -6617,35 +6617,35 @@ function bk_export_ics(){
 	    'posts_per_page' => -1,
     ));
     if($the_event->have_posts()) :
-    
+
         // Escapes a string of characters
         function escapeString($string) {
               return preg_replace('/([\,;])/','\\\$1', $string);
         }
-    
+
         while($the_event->have_posts()) : $the_event->the_post();
-	
+
 		$postid = get_the_ID();
-        $pod = new BikeClubRide($postid);
-        $ridestatus = $pod->get_ride_status();
-        $datestr = $pod->get_ride_date(true) . ' ' . $pod->get_time(true);
+        $pod = pods('ride', $postid);
+        $ridestatus = $pod->field('ride-status');
+        $datestr = $pod->display('ride_date') . ' ' . $pod->display('time');
         $tz = new DateTimeZone(wp_timezone_string());
         $start_time = DateTime::createFromFormat("m/d/Y h:i a", $datestr, $tz);
         $sttime = $start_time->getTimeStamp();
 		$start_date = wp_date("Ymd\THis", $sttime);
-        $tourfield = $pod->get_tour();
+        $tourfield = $pod->field('tour');
         $tourid = $tourfield['ID'];
-        $tpod = new BikeClubTour($tourid);
-        $tourno = $tpod->get_tour_number();
-        $start = $tpod->get_start_point();
+        $tpod = pods('tour', $tourid);
+        $tourno = $tpod->field('tour_number');
+        $start = $tpod->field('start_point');
         $startid = $start['ID'];
-        $stpod = new BikeClubStartPoint($startid );
-        $lat = $stpod->get_latitude(true);
-        $lon = $stpod->get_longitude(true);
-        $pace = $pod->get_pace(true);
+        $stpod = pods( 'start_point', $startid );
+        $lat = $stpod->display('latitude');
+        $lon = $stpod->display('longitude');
+        $pace = $pod->display('pace');
         $created_date = get_post_time('Ymd\THis\Z', true, $postid);
 		$timestamp = date_i18n('Ymd\THis\Z', time(), true);
-		$organiser = $pod->get_ride_leader(true);
+		$organiser = $pod->display('ride_leader');
         $summary = 'MAF' . $tourno . ' Bike Ride: ' . $pace . " " . $organiser;
         $url = 'https://mafw.org/ride/' . $postid . '/';
         $address = $lat . "," . $lon;
@@ -6709,8 +6709,8 @@ function bk_strip_shortcodes( $content ) {
     return $content;
 }
 add_action( 'init', 'mpp_custom_bridge_resize_after_upload_func' );
- 
-function mpp_custom_bridge_resize_after_upload_func() { 
+
+function mpp_custom_bridge_resize_after_upload_func() {
     if( function_exists( 'jr_uploadresize_resize' ) )
         add_action( 'mpp_handle_upload', 'jr_uploadresize_resize' );
 }
@@ -6753,7 +6753,7 @@ function bk_disable_voting_page()
 function bk_func_disable_voting_page() {
 	$tz = new DateTimeZone(wp_timezone_string());
     $dow_obj = new DateTime("2024-11-07 00:00:01", $tz);
-    wp_schedule_single_event( $dow_obj->getTimeStamp(), 'bk_disable_voting_page'); 
+    wp_schedule_single_event( $dow_obj->getTimeStamp(), 'bk_disable_voting_page');
 }
 
 add_action('pmpro_add_member_added', 'bk_add_xprofile_visibility', 30, 1);
@@ -6834,8 +6834,8 @@ function bk_pmpro_registration_checks_require_code_to_register($pmpro_continue_r
 function bk_pmpro_disable_member_emails($recipient, $email)
 {
 	if ($recipient == "pkurey@optonline.net" || $recipient == "bobgeddis2@aol.com")
-  		$recipient = NULL;	
-	
+		$recipient = NULL;
+
 	return $recipient;
 }
 add_filter("pmpro_email_recipient", "bk_pmpro_disable_member_emails", 10, 2);
@@ -6855,7 +6855,7 @@ function bk_registration($userid)
     $fields[] = array( 'name' => 'state', 'num' => 101 );
     $fields[] = array( 'name' => 'zip', 'num' => 102 );
     foreach ($fields as $field) {
-        $val = get_user_meta( $userid, $field->name, true ); 
+        $val = get_user_meta( $userid, $field->name, true );
         if (!empty($val))
             xprofile_set_field_data( $field->num, $userid, $val );
     }
@@ -6929,8 +6929,8 @@ add_filter( 'pmpro_checkout_level', 'bk_pmpro_checkout_level_extend_memberships'
 // 	$mytables=$wpdb->get_results("SHOW TABLES");
 // 	foreach ($mytables as $mytable)
 // 	{
-// 	    foreach ($mytable as $t) 
-// 	    {       
+// 	    foreach ($mytable as $t)
+// 	    {
 // 	        maybe_convert_table_to_utf8mb4( $t );
 // 	    }
 // 	}
@@ -6965,7 +6965,7 @@ function bk_em_styles_placeholders($replace, $EM_Event, $result){
     if( preg_match( '/#_EVENTIMAGE.*/', $result ) ) {
 		$url = get_post_meta($EM_Event->post_id, 'EVENTURL', true);
 		if ( empty( $url ) ) {
- 		    $url = esc_url($EM_Event->get_permalink());
+		    $url = esc_url($EM_Event->get_permalink());
 		    $replace = '<a href="' . $url . '">' . $replace . '</a>';
 		}
         else {
@@ -6987,7 +6987,7 @@ function bk_em_styles_placeholders($replace, $EM_Event, $result){
     return $replace;
 }
 function bk_gutenberg_categories_fix($args) {
-// FIX MISSING CATEGORIES AND TAGS in Event Manager edit mode. 
+// FIX MISSING CATEGORIES AND TAGS in Event Manager edit mode.
     $args['show_in_rest'] = true;
     return $args;
 }
@@ -7011,7 +7011,7 @@ add_filter('em_cpt_tags','bk_gutenberg_categories_fix');
 function bk_get_events_grid_shortcode($args, $format='') {
 	$args = (array) $args;
 	$args['ajax'] = isset($args['ajax']) ? $args['ajax']:(!defined('EM_AJAX') || EM_AJAX );
-	$args['format'] = ($format != '' || empty($args['format'])) ? $format : $args['format']; 
+	$args['format'] = ($format != '' || empty($args['format'])) ? $format : $args['format'];
 	$args['format'] = html_entity_decode($args['format']); //shortcode doesn't accept html
 	$args['limit'] = isset($args['limit']) ? $args['limit'] : get_option('dbem_events_default_limit');
 	if( !empty($args['id']) ) $args['id'] = rand();
@@ -7060,12 +7060,12 @@ function bk_update_users()
 				$town = $data[4];
 				$state = $data[5];
 				$zip = $data[6];
-    			xprofile_set_field_data(102, $userid, $zip);
-    			xprofile_set_field_data(100, $userid, $town);
-    			xprofile_set_field_data(101, $userid, $state);
-    			xprofile_set_field_data(98, $userid, $address);
+			xprofile_set_field_data(102, $userid, $zip);
+			xprofile_set_field_data(100, $userid, $town);
+			xprofile_set_field_data(101, $userid, $state);
+			xprofile_set_field_data(98, $userid, $address);
 				$ret .= $userid . "<br />\n";
-        	}
+		}
 		}
 		fclose($handle);
 	}
@@ -7114,7 +7114,7 @@ function bk_wp_mail( $args) {
 
 /*
  * This solution should be the accepted answer in this forum thread.
- * 
+ *
  * https://generatepress.com/forums/topic/gpgbpopup-maker-issue/#post-2088153
  */
 add_filter( 'generateblocks_do_content', function( $content ) {
@@ -7214,7 +7214,7 @@ add_filter( 'fmb_post_types', function( $post_types ) {
     unset( $post_types['terrain'] );
     unset( $post_types['tour'] );
     return $post_types;
-} ); 
+} );
 
 function multineedle_stripos($haystack, $needles, $offset=0) {
     foreach($needles as $needle) {
@@ -7245,12 +7245,12 @@ add_filter('em_rss_template_args', function($args) {
 
 /**
  * Add 'buddypress' field attribute to existing User Fields.
- * 
+ *
  * title: Add buddypress to existing User Fields
  * layout: snippet-example
  * collection: pmpro-buddypress
  * category: custom-fields, buddypress, buddyboss, xprofile
- * 
+ *
  * You can add this recipe to your site by creating a custom plugin
  * or using the Code Snippets plugin available for free in the WordPress repository.
  * Read this companion article for step-by-step directions on either method.
@@ -7269,14 +7269,14 @@ add_filter('em_rss_template_args', function($args) {
         'emergency_contact_name' => 'Emergency Contact Name',
         'emergency_contact_number' => 'Emergency Number'
 	);
- 
+
 	// Loop through the above array and add the buddypress field to the existing PMPro User Field.
 	foreach( $buddypress_mapping as $user_field => $buddypress_field ) {
 		if ( $field->name === $user_field ) {
 			$field->buddypress = $buddypress_field;
 		}
 	}
- 
+
 	return $field;
 }
 add_filter( 'pmpro_add_user_field', 'bk_pmpro_add_buddypress_to_existing_fields', 10, 2 );
@@ -7285,7 +7285,7 @@ add_filter('members_post_error_message', 'bk_login_redirect', 10, 1);
 function bk_login_redirect( $error_msg ) {
     if (!is_user_logged_in()) {
         $current_url = home_url( add_query_arg( [], $GLOBALS['wp']->request ) );
-		$url = esc_url( wp_login_url( $current_url ) ); 
+		$url = esc_url( wp_login_url( $current_url ) );
         return '<div class="members-access-error"><b>Please <a href="' . $url . '">Log in</a> to access this page.</b></div>';
     }
     return $error_msg;
@@ -7313,23 +7313,23 @@ function bk_become_ride_leader() {
 	if (isset($_POST['link']) ) {
 		$link = isset($_POST['link']) ? $_POST['link'] : "";
 		$link = preg_replace('/\?.*/', '', $link);
-    	$rideid = absint(basename($link));
+	$rideid = absint(basename($link));
 	}
 	else {
 		$rideid = 0;
 	}
 	if ($rideid > 0 && current_user_can('rideleader')) {
-        $rpod = new BikeClubRide($rideid);
+        $rpod = pods('ride', $rideid);
 		$userid = get_current_user_id();
 		$post_arr = [ 'ID' => $rideid, 'post_author' => $userid ];
 		wp_update_post($post_arr);
-		$rpod->set_ride_status(0);
-		// $rpod->set_ID($userid);
-		$rpod->set_ride_leader($userid);
-		$rl = $rpod->get_ride_leader();
-		// $rpod->set_ride_status(0);
+		$rpod->save('ride-status', 0);
+		// $rpod->save('ID', $userid);
+		$rpod->save('ride_leader', $userid);
+		$rl = $rpod->field('ride_leader');
+		// $rpod->save('ride-status', 0);
         wp_update_post([ 'ID' => $rideid, 'post_author' => $userid ]);
-		$rpod->set_ride_status(0);
+		$rpod->save('ride-status', 0);
         bk_add_ride_leader_to_ride($rideid, $rpod);
         bk_send_ride_email_if_needed($rpod, $rideid, $userid);
 		bk_clear_cache();
@@ -7379,28 +7379,28 @@ function add_attendee( $rideid, $current_userid) {
 	else {
 		return;
 	}
-	$upod = new BikeClubUser($current_userid);
-    $rpod = new BikeClubRide($rideid);
-	$rl = $rpod->get_ride_leader();
+	$upod = pods('user', $current_userid);
+    $rpod = pods('ride', $rideid);
+	$rl = $rpod->field('ride_leader');
     $car_license = xprofile_get_field_data('Vehicle License', $current_userid);
     $emergency_phone = xprofile_get_field_data('Emergency Number', $current_userid);
     $cell_phone = xprofile_get_field_data('Mobile Phone', $current_userid);
-    $user = new BikeClubUser($current_userid);
+    $user = pods('user', $current_userid);
     $data = array(
-              'title' => $rideid . ' - ' . $user->get_display_name(),
+              'title' => $rideid . ' - ' . $user->field('display_name'),
               'ride_attendee_status' => "Yes",
               'car_license' => $car_license,
               'emergency_phone' => $emergency_phone,
               'cell_phone' => $cell_phone
             );
-    $pod = new BikeClubRideAttendee();
+    $pod = pods('ride-attendee');
     $aid = $pod->add($data);
     if (!empty($aid) && is_int($aid) && $aid > 0) {
 	    update_post_meta($aid, "_members_access_role", 'active');
-        $rpod->add_to('attendees', $aid); 
-		$apod = new BikeClubRideAttendee($aid);
+        $rpod->add_to('attendees', $aid);
+		$apod = pods('ride-attendee', $aid);
 		$apod->add_to('rider', $current_userid);
-	    $upod->add_to('rides', $aid); 
+	    $upod->add_to('rides', $aid);
 	}
     bk_clear_cache();
 }
@@ -7444,22 +7444,22 @@ function bk_remove_emergency_contact_tags() {
 }
 
 add_action( 'wp_enqueue_scripts', 'bk_ride_enqueue_func' );
-function bk_ride_enqueue_func() {   
+function bk_ride_enqueue_func() {
     // --- SECTION 1: RIDES ---
     if ( is_singular( 'ride' ) ) {
         if ( isset( $_GET['riderole'] ) ) {
             $role = $_GET['riderole'];
             if ( is_numeric( $role ) ) {
-                
+
                 // Role 2: Coordinator
                 if ( $role == 2 ) {
                     if ( current_user_can( 'ridecoordinator' ) ) {
                         gravity_form_enqueue_scripts( 7, true );
                     }
-                } 
+                }
                 // Role 1: Ride Leader
                 elseif ( $role == 1 ) {
-                    if ( current_user_can( 'rideleader' ) ) { 
+                    if ( current_user_can( 'rideleader' ) ) {
                         gravity_form_enqueue_scripts( 21, true );
                         gravity_form_enqueue_scripts( 32, true );
                     }
@@ -7468,7 +7468,7 @@ function bk_ride_enqueue_func() {
         }
     }
     // --- SECTION 2: TOURS ---
-    else if ( is_singular( 'tour' ) ) { 
+    else if ( is_singular( 'tour' ) ) {
         if ( isset( $_GET['touredit'] ) ) {
             if ( $_GET['touredit'] == "Edit" && ( current_user_can( "ridecoordinator" ) || current_user_can( "administrator" ) ) ) {
                 gravity_form_enqueue_scripts( 19, true );
@@ -7494,7 +7494,7 @@ function custom_prefix_admin_enqueue_scripts($hook_suffix = '') {
 
 // add_filter('em_object_get_default_search', function( $defaults ) {
     // $defaults['scope'] = 'all';
-    // return $defaults; 
+    // return $defaults;
 // });
 // add_filter('em_content_categories_args', function($args) {
     // $args['scope'] = 'all';
@@ -7504,7 +7504,7 @@ function custom_prefix_admin_enqueue_scripts($hook_suffix = '') {
 /* add_filter( 'bp_enqueue_assets_in_bp_pages_only', '__return_true' );
 
 $pmprogl_gift_levels = array(
-    4 => array ( 
+    4 => array (
 	    'level_id' => 1,
 		'initial_payment' => 0,
 		'billing_amount' => 0,
