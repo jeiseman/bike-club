@@ -12,17 +12,17 @@ if (!empty($_GET['touredit']) && $_GET['touredit'] == "Edit" && (current_user_ca
 $post = get_post($postid);
 $tpod = pods('tour', $postid);
 $start = $tpod->field('start_point');
-$tourno = get_post_meta($postid, 'tour_number', true);
+$tourno = $tpod->field('tour_number');
 $tourname = $tourno . " - " . $post->post_title;
 $creator = $tpod->field('creator');
-$active = get_post_meta($postid, 'active', true) ? "Yes" : "No";
+$active = $tpod->field('active') ? "Yes" : "No";
 if (function_exists('bk_tour_description'))
     $description = bk_tour_description($tpod);
 else
-    $description = get_post_meta($postid, 'tour_description', true);
-$comments = get_post_meta($postid, 'tour_comments', true);
+    $description = $tpod->field('tour_description');
+$comments = $tpod->field('tour_comments');
 $terrain = $tpod->field('tour-terrain');
-$tour_type = get_post_meta($postid, 'tour_type', true);
+$tour_type = $tpod->field('tour_type');
 if (!empty($terrain)) {
     $ptpage = '<a href="#" class="pace-terrain">';
     // if ($tour_type == 0)
@@ -45,11 +45,11 @@ if ( $start ) {
 else {
     $startlink = '';
 }
-$miles = get_post_meta($postid, 'miles', true);
-$climb = get_post_meta($postid, 'climb', true);
-$tourtype = get_post_meta($postid, 'tour_type', true) ? "ATB" : "Road";
-$mapurl = get_post_meta($postid, 'tour_map', true);
-$cue = get_post_meta($postid, 'cue_sheet_number', true); ?>
+$miles = $tpod->field('miles');
+$climb = $tpod->field('climb');
+$tourtype = $tpod->field('tour_type') ? "ATB" : "Road";
+$mapurl = $tpod->field('tour_map');
+$cue = $tpod->field('cue_sheet_number'); ?>
 <dl>
    <dt>Tour</dt>
    <dd><?php echo $tourname;?></dd>

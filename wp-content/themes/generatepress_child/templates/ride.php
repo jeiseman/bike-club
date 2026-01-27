@@ -192,9 +192,16 @@ if ($start) {
 else {
 	$startloc = "";
 }
-$tourno = get_post_meta($tourid, 'tour_number', true);
-$mapurl = get_post_meta($tourid, 'tour_map', true);
-$cue = get_post_meta($tourid, 'cue_sheet_number', true);
+if ( ! empty( $tourid ) ) {
+    $tpod   = pods( 'tour', $tourid );
+    $tourno = $tpod->field( 'tour_number' );
+    $mapurl = $tpod->field( 'tour_map' );
+    $cue    = $tpod->field( 'cue_sheet_number' );
+} else {
+    $tourno = '';
+    $mapurl = '';
+    $cue    = '';
+}
 if (empty($emergency_phone))
     $emergency_phone = strip_tags(xprofile_get_field_data('Emergency Number', $curr_userid));
 if (empty($cell_phone))
