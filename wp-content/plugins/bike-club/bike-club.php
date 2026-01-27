@@ -655,7 +655,7 @@ function bk_rides_i_rode_table()
     $ret = "";
     $current_user = wp_get_current_user();
     $params = array(
-        'where' => "t.post_title LIKE '%" . $current_user->display_name . "'",
+        'where' => "t.post_title LIKE '%" . esc_sql($current_user->display_name) . "'",
         'limit' => -1
     );
     $pod = pods('ride-attendee', $params);
@@ -737,7 +737,7 @@ function bk_user_attended_rides($user)
 {
     $ride_count = 0;
     $params = array(
-        'where' => "t.post_title LIKE '%" . $user->display_name . "'",
+        'where' => "t.post_title LIKE '%" . esc_sql($user->display_name) . "'",
         'limit' => -1
     );
     $pod = pods('ride-attendee', $params);
@@ -763,7 +763,7 @@ function bk_has_attended_rides($userid)
     $ret = "";
     $user = get_userdata($userid);
     $params = array(
-        'where' => "t.post_title LIKE '%" . $user->display_name . "' AND t.post_date_gmt > '" . date('Y-m-d H:i:s', strtotime('-1 year')) . "'",
+        'where' => "t.post_title LIKE '%" . esc_sql($user->display_name) . "' AND t.post_date_gmt > '" . date('Y-m-d H:i:s', strtotime('-1 year')) . "'",
         'limit' => 1
     );
     $pod = pods('ride-attendee', $params);
@@ -1062,14 +1062,30 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
           $filter .= ' AND ride-status.meta_value != 3 ';
       $rpod = pods('ride');
       $params = array(
-            'orderby' => 'CAST(ride_date.meta_value AS date), CAST(time.meta_value AS time), pace.index',
+            'orderby' => 'CAST(ride_date.meta_value AS date), CAST(time.meta_value AS time)',
 	         'limit' => -1,
              'where' => $filter
         );
       $rpod->find($params);
-      if ($rpod->total() > 0)
-        $curdate_obj = new DateTime("now", $tz);
+      $rides = array();
       while( $rpod->fetch()) {
+          $rides[] = $rpod->row();
+      }
+      usort($rides, function($a, $b) {
+          $date_a = $a['ride_date'];
+          $date_b = $b['ride_date'];
+          if ($date_a != $date_b) return $date_a < $date_b ? -1 : 1;
+          $time_a = $a['time'];
+          $time_b = $b['time'];
+          if ($time_a != $time_b) return $time_a < $time_b ? -1 : 1;
+          $pace_a = isset($a['pace']['index']) ? $a['pace']['index'] : 0;
+          $pace_b = isset($b['pace']['index']) ? $b['pace']['index'] : 0;
+          return $pace_a - $pace_b;
+      });
+      if (!empty($rides))
+        $curdate_obj = new DateTime("now", $tz);
+      foreach( $rides as $ride_row) {
+        $rpod->fetch($ride_row);
         $weekchange = 0;
 	    $date_str = $rpod->display('ride_date') . ' ' . $rpod->display('time');
 		$date_obj = new DateTime($date_str, $tz);
