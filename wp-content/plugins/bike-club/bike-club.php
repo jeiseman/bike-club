@@ -1067,9 +1067,25 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
              'where' => $filter
         );
       $rpod->find($params);
-      if ($rpod->total() > 0)
-        $curdate_obj = new DateTime("now", $tz);
+      $rides = array();
       while( $rpod->fetch()) {
+          $rides[] = $rpod->row();
+      }
+      usort($rides, function($a, $b) {
+          $date_a = $a['ride_date'];
+          $date_b = $b['ride_date'];
+          if ($date_a != $date_b) return $date_a < $date_b ? -1 : 1;
+          $time_a = $a['time'];
+          $time_b = $b['time'];
+          if ($time_a != $time_b) return $time_a < $time_b ? -1 : 1;
+          $pace_a = isset($a['pace']['index']) ? $a['pace']['index'] : 0;
+          $pace_b = isset($b['pace']['index']) ? $b['pace']['index'] : 0;
+          return $pace_a - $pace_b;
+      });
+      if (!empty($rides))
+        $curdate_obj = new DateTime("now", $tz);
+      foreach( $rides as $ride_row) {
+        $rpod->fetch($ride_row);
         $weekchange = 0;
 	    $date_str = $rpod->display('ride_date') . ' ' . $rpod->display('time');
 		$date_obj = new DateTime($date_str, $tz);
