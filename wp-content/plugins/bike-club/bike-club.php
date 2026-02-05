@@ -451,7 +451,7 @@ function bikeride_mystatus_function() {
             $pod = pods('ride-attendee');
             $aid = $pod->add($data);
             if (!empty($aid) && is_int($aid) && $aid > 0)
-                pods('ride-attendee', $aid)->save('_members_access_role', 'active');
+                update_post_meta($aid, '_members_access_role', 'active');
             $rpod->add_to('attendees', $aid); 
 			$apod = pods('ride-attendee', $aid);
 			$apod->add_to('rider', $current_userid);
