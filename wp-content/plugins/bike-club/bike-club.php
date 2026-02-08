@@ -657,7 +657,7 @@ function bk_rides_i_rode_table()
     $current_user = wp_get_current_user();
     $params = array(
         'limit' => -1,
-        'where' => "t.post_title LIKE '%" . esc_sql($current_user->display_name) . "'",
+        'where' => array( 'key' => 'post_title', 'value' => '%' . $current_user->display_name, 'compare' => 'LIKE' ),
     );
     $pod = pods('ride-attendee', $params);
 
@@ -739,7 +739,7 @@ function bk_user_attended_rides($user)
     $ride_count = 0;
     $params = array(
         'limit' => -1,
-        'where' => "t.post_title LIKE '%" . esc_sql($user->display_name) . "'",
+        'where' => array( 'key' => 'post_title', 'value' => '%' . $user->display_name, 'compare' => 'LIKE' ),
     );
     $pod = pods('ride-attendee', $params);
 
@@ -765,7 +765,11 @@ function bk_has_attended_rides($userid)
     $user = get_userdata($userid);
     $params = array(
         'limit' => 1,
-        'where' => "t.post_title LIKE '%" . esc_sql($user->display_name) . "' AND t.post_date_gmt > DATE_SUB(NOW(), INTERVAL 1 YEAR)",
+        'where' => array(
+            'relation' => 'AND',
+            array( 'key' => 'post_title', 'value' => '%' . $user->display_name, 'compare' => 'LIKE' ),
+            array( 'key' => 'post_date_gmt', 'value' => date('Y-m-d H:i:s', strtotime('-1 year')), 'compare' => '>' )
+        )
     );
     $pod = pods('ride-attendee', $params);
 
@@ -928,7 +932,7 @@ function bike_new_tourno()
 	}
     $pod = pods('tour');
     $params = array(
-        'orderby' => 'tour_number DESC',
+        'orderby' => array( 'tour_number' => 'DESC' ),
         'limit' => 1
     );
     $pod->find($params);
@@ -1060,31 +1064,34 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
         </thead>
         <tbody>';
 	  $curr_userid = get_current_user_id();
+      $filter = array();
 	  if ($role == 'ride_leader' && !empty($curr_userid) && $curr_userid > 0)  {
-		  $filter = 'ride_leader.ID = ' . $curr_userid;
+          $filter[] = array('key' => 'ride_leader.ID', 'value' => $curr_userid, 'compare' => '=');
           if ($scheduled == 0) { // ridden, canceled (for my led rides)
-              $filter[] = ' AND ( `ride-status` = 2 OR `ride-status` = 4 ) ';
-              $filter .= " AND ride_date  >= '" . $start_date .
-                "' AND ride_date < '" . $end_date . "'";
+              $filter[] = array('relation' => 'OR', array('key' => 'ride-status', 'value' => 2, 'compare' => '='), array('key' => 'ride-status', 'value' => 4, 'compare' => '='));
+              $filter[] = array('key' => 'ride_date', 'value' => $start_date, 'compare' => '>=');
+              $filter[] = array('key' => 'ride_date', 'value' => $end_date, 'compare' => '<');
           }
-          else if ($scheduled == 1) // scheduled (for my scheduled rides)
-              $filter .= ' AND ( `ride-status` = 0 ) AND ride_date >= "2019-03-01"';
+          else if ($scheduled == 1) { // scheduled (for my scheduled rides)
+              $filter[] = array('key' => 'ride-status', 'value' => 0, 'compare' => '=');
+              $filter[] = array('key' => 'ride_date', 'value' => '2019-03-01', 'compare' => '>=');
+          }
       }
       else if ($role == 'ride_leader_ro' && !empty($curr_userid) && $curr_userid > 0) {
-		  $filter = 'ride_leader.ID = ' . $curr_userid;
-          $filter .= " AND ride_date >= '" . $start_date .
-                "' AND ride_date < '" . $end_date . "'";
+		  $filter[] = array('key' => 'ride_leader.ID', 'value' => $curr_userid, 'compare' => '=');
+          $filter[] = array('key' => 'ride_date', 'value' => $start_date, 'compare' => '>=');
+          $filter[] = array('key' => 'ride_date', 'value' => $end_date, 'compare' => '<');
       }
       else {
-          $filter = "ride_date >= '" . $start_date .
-                "' AND ride_date < '" . $end_date . "'";
+          $filter[] = array('key' => 'ride_date', 'value' => $start_date, 'compare' => '>=');
+          $filter[] = array('key' => 'ride_date', 'value' => $end_date, 'compare' => '<');
       }
       if ($oldschedule != 0 || ($role != 'ride_coordinator' && $scheduled != 1)) {
-          $filter .= ' AND `ride-status` != 3 ';
+          $filter[] = array('key' => 'ride-status', 'value' => 3, 'compare' => '!=');
       }
       $rpod = pods('ride');
       $params = array(
-            'orderby' => 'ride_date, time, pace.index',
+            'orderby' => array( 'ride_date' => 'ASC', 'time' => 'ASC', 'pace.index' => 'ASC' ),
 	         'limit' => -1,
              'where' => $filter
         );
@@ -1488,7 +1495,7 @@ function bk_add_tours_to_hazards()
     $newtours = array( 50, 78, 80, 635, 678, 697, 701, 798, 868, 873, 906, 1025, 1052, 1221, 1226, 1470 );
 
     foreach ($newtours as $tour) {
-        $params = array( 'where' => 'tour_number = ' . (int) $tour );
+        $params = array( 'where' => array( 'key' => 'tour_number', 'value' => (int) $tour, 'compare' => '=' ) );
         $tpods = pods('tour', $params);
         if (0 < $tpods->total()) {
             if ($tpods->fetch()) {
@@ -1587,7 +1594,7 @@ function bk_schedule_blocks()
 	$datestr = $date_obj->format('Y-m-d');
     $params = array(
         'limit' => -1,
-        'where' => [ 'end_date >= ' . $datestr ]
+        'where' => array( array( 'key' => 'end_date', 'value' => $datestr, 'compare' => '>=' ) )
     );
     $pod = pods('locationdateblock', $params);
 
@@ -1963,7 +1970,7 @@ function bike_pre_save_tour($pieces, $is_new_item) {
         $num = $pieces['fields']['tour_number']['value'];
         $pod = pods('tour');
         $params = array(
-            'where' => 'tour_number = ' .  (int) $num
+            'where' => array( 'key' => 'tour_number', 'value' => (int) $num, 'compare' => '=' )
         );
         $pod->find($params);
         if ($pod->total() > 0)
@@ -2964,8 +2971,12 @@ function tour_counts()
     $end_date = $ed->format('Y-m-d');
     $params = array(
         'limit' => -1,
-        'where' => "`ride-status` = 4 AND ride_date >= '$start_date' AND ride_date < '$end_date'",
-        'orderby' => 'ride_date ASC',
+        'where' => array(
+            array( 'key' => 'ride-status', 'value' => 4, 'compare' => '=' ),
+            array( 'key' => 'ride_date', 'value' => $start_date, 'compare' => '>=' ),
+            array( 'key' => 'ride_date', 'value' => $end_date, 'compare' => '<' )
+        ),
+        'orderby' => array( 'ride_date' => 'ASC' ),
     );
     $pod = pods('ride', $params);
     while ($pod->fetch()) {
@@ -3136,7 +3147,10 @@ function bk_ride_date_loc_prohibited($date, $tourid)
 	$startid = $start ? $start['ID'] : 0;
     $params = array(
         'limit' => -1,
-        'where' => "end_date <= '$datestr' AND start_date > '$datestr_minus_one'",
+        'where' => array(
+            array( 'key' => 'end_date', 'value' => $datestr, 'compare' => '<=' ),
+            array( 'key' => 'start_date', 'value' => $datestr_minus_one, 'compare' => '>' )
+        ),
     );
     $pod = pods('locationdateblock', $params);
 
@@ -3180,7 +3194,12 @@ function rideleader_signupcheck($start_time, $tourid)
 	$max_time->add($interval);
     $params = array(
         'limit' => -1,
-        'where' => "`ride-status` = 0 AND ride_date = '" . $start_time->format("Y-m-d") . "' AND time >= '" . $min_time->format("H:i") . "' AND time <= '" . $max_time->format("H:i") . "'",
+        'where' => array(
+            array( 'key' => 'ride-status', 'value' => 0, 'compare' => '=' ),
+            array( 'key' => 'ride_date', 'value' => $start_time->format("Y-m-d"), 'compare' => '=' ),
+            array( 'key' => 'time', 'value' => $min_time->format("H:i"), 'compare' => '>=' ),
+            array( 'key' => 'time', 'value' => $max_time->format("H:i"), 'compare' => '<=' )
+        ),
     );
     // error_log(print_r($params, true));
     $pod = pods('ride', $params);
@@ -3221,7 +3240,13 @@ function ride_leadercheck($ridestart, $userid = 0)
 	$end_time = $ed->format('H:i');
     $params = array(
         'limit' => -1,
-        'where' => "ride_leader.ID = $userid AND `ride-status` = 0 AND ride_date = '$ride_date' AND time >= '$start_time' AND time <= '$end_time'",
+        'where' => array(
+            array( 'key' => 'ride_leader.ID', 'value' => $userid, 'compare' => '=' ),
+            array( 'key' => 'ride-status', 'value' => 0, 'compare' => '=' ),
+            array( 'key' => 'ride_date', 'value' => $ride_date, 'compare' => '=' ),
+            array( 'key' => 'time', 'value' => $start_time, 'compare' => '>=' ),
+            array( 'key' => 'time', 'value' => $end_time, 'compare' => '<=' )
+        ),
     );
     $pod = pods('ride', $params);
 	if ($pod->total() > 0) {
@@ -4774,7 +4799,7 @@ function bk_display_contacts_func()
     </tbody>';
     $pod = pods('role');
     $params = array(
-       'orderby' => 'index',
+       'orderby' => array( 'index' => 'ASC' ),
        'limit' => -1
     );
     $pod->find($params);
@@ -5615,7 +5640,15 @@ function bk_member_ride_report()
 	}
     $params = array(
         'limit' => -1,
-        'where' => "(`ride-status` = 2 OR `ride-status` = 4) AND ride_date >= '" . $daterange['start_date'] . "' AND ride_date < '" . $daterange['end_date'] . "'",
+        'where' => array(
+            'relation' => 'AND',
+            array( 'relation' => 'OR',
+                array( 'key' => 'ride-status', 'value' => 2, 'compare' => '=' ),
+                array( 'key' => 'ride-status', 'value' => 4, 'compare' => '=' )
+            ),
+            array( 'key' => 'ride_date', 'value' => $daterange['start_date'], 'compare' => '>=' ),
+            array( 'key' => 'ride_date', 'value' => $daterange['end_date'], 'compare' => '<' )
+        )
     );
     $pod = pods('ride', $params);
     if ($pod->total() > 0) {
@@ -5734,7 +5767,15 @@ function bk_ride_leader_report()
 	$ridercnt = [];
     $params = array(
         'limit' => -1,
-        'where' => "(`ride-status` = 2 OR `ride-status` = 4) AND ride_date >= '" . $daterange['start_date'] . "' AND ride_date < '" . $daterange['end_date'] . "'",
+        'where' => array(
+            'relation' => 'AND',
+            array( 'relation' => 'OR',
+                array( 'key' => 'ride-status', 'value' => 2, 'compare' => '=' ),
+                array( 'key' => 'ride-status', 'value' => 4, 'compare' => '=' )
+            ),
+            array( 'key' => 'ride_date', 'value' => $daterange['start_date'], 'compare' => '>=' ),
+            array( 'key' => 'ride_date', 'value' => $daterange['end_date'], 'compare' => '<' )
+        )
     );
     $pod = pods('ride', $params);
 	// error_log(print_r($query, true));
@@ -6192,7 +6233,7 @@ add_shortcode('bk-nl-link', 'bk_nl_link_func');
 function bk_nl_link_func()
 {
     $params = array(
-        'orderby' => 't.post_date DESC',
+        'orderby' => array( 'post_date' => 'DESC' ),
         'limit' => 1,
         'tax_query' => array(
          array(
@@ -6279,9 +6320,9 @@ function bk_sponsors()
 
         $ret .= '<strong>' . $term->name . '</strong><br />';
         $params = array(
-             'orderby' => 't.post_title',
+             'orderby' => array( 'post_title' => 'ASC' ),
              'limit' => -1,
-             'where' => 'sponsor-town.slug = "' . $term->slug . '"'
+             'where' => array( 'key' => 'sponsor-town.slug', 'value' => $term->slug, 'compare' => '=' )
         );
         $pod = pods('club-sponsor');
 		$sponsors = $pod->find($params);
@@ -6388,7 +6429,7 @@ function bk_start_points()
     $fields = array('post_title', 'start-county', 'state', 'longitude', 'latitude', 'active' => array( 'default' => 1 ), 'directions');
     $stpod = pods("start_point");
     $params = array(
-            'orderby' => 't.post_title',
+            'orderby' => array( 'post_title' => 'ASC' ),
 		    'limit' => -1
         );
     $stpod->find($params);
