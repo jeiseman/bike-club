@@ -824,11 +824,32 @@ function bike_rides_need_updating()
     if (current_user_can('rideleader') || current_user_can('manage_options')) {
 	    $tz = new DateTimeZone(wp_timezone_string());
         $curdt = new DateTime("now", $tz);
-	    $curdate = $curdt->format('Y-m-d');
+        $curdate = $curdt->format('Y-m-d');
         $params = array(
             'limit' => 1,
-            'where' => "ride_leader.ID = " . get_current_user_id() . " AND `ride-status`.meta_value = 0 AND CAST(ride_date.meta_value AS date) < '$curdate' AND CAST(ride_date.meta_value AS date) >= '2023-03-01'",
-        );
+            'where' => array(
+                  array(
+                      'key'     => 'ride_leader.ID',
+                      'value'   => get_current_user_id(),
+                      'compare' => '='
+                  ),
+                  array(
+                      'key'     => 'ride-status', // No backticks, no .meta_value
+                      'value'   => 0,
+                      'compare' => '='
+                  ),
+                  array(
+                      'key'     => 'ride_date',
+                      'value'   => $curdate,
+                      'compare' => '<'
+                  ),
+                  array(
+                      'key'     => 'ride_date',
+                      'value'   => '2023-03-01',
+                      'compare' => '>='
+                  )
+              ),
+          );
         $pod = pods('ride', $params);
         if ($pod->total() > 0) {
              $msg = '<p class="aligncenter redfont"><a href="' . get_site_url() . '/my-scheduled-rides/">Please update your RIDES! Click here to update.</a></p>';
@@ -907,7 +928,7 @@ function bike_new_tourno()
 	}
     $pod = pods('tour');
     $params = array(
-        'orderby' => 'CAST(tour_number.meta_value AS unsigned) DESC',
+        'orderby' => 'tour_number DESC',
         'limit' => 1
     );
     $pod->find($params);
@@ -1042,27 +1063,28 @@ function ride_table($start_date, $end_date, $role, $show_date, $small = 0, $sche
 	  if ($role == 'ride_leader' && !empty($curr_userid) && $curr_userid > 0)  {
 		  $filter = 'ride_leader.ID = ' . $curr_userid;
           if ($scheduled == 0) { // ridden, canceled (for my led rides)
-              $filter .= ' AND ( ride-status.meta_value = 2 OR ride-status.meta_value = 4 ) ';
-              $filter .= " AND CAST(ride_date.meta_value AS date) >= '" . $start_date .
-                "' AND CAST(ride_date.meta_value AS date) < '" . $end_date . "'";
+              $filter[] = ' AND ( `ride-status` = 2 OR `ride-status` = 4 ) ';
+              $filter .= " AND ride_date  >= '" . $start_date .
+                "' AND ride_date < '" . $end_date . "'";
           }
           else if ($scheduled == 1) // scheduled (for my scheduled rides)
-              $filter .= ' AND ( ride-status.meta_value = 0 ) AND CAST(ride_date.meta_value AS date) >= "2019-03-01"';
+              $filter .= ' AND ( `ride-status` = 0 ) AND ride_date >= "2019-03-01"';
       }
       else if ($role == 'ride_leader_ro' && !empty($curr_userid) && $curr_userid > 0) {
 		  $filter = 'ride_leader.ID = ' . $curr_userid;
-          $filter .= " AND CAST(ride_date.meta_value AS date) >= '" . $start_date .
-                "' AND CAST(ride_date.meta_value AS date) < '" . $end_date . "'";
+          $filter .= " AND ride_date >= '" . $start_date .
+                "' AND ride_date < '" . $end_date . "'";
       }
       else {
-          $filter = "CAST(ride_date.meta_value AS date) >= '" . $start_date .
-                "' AND CAST(ride_date.meta_value AS date) < '" . $end_date . "'";
+          $filter = "ride_date >= '" . $start_date .
+                "' AND ride_date < '" . $end_date . "'";
       }
-      if ($oldschedule != 0 || ($role != 'ride_coordinator' && $scheduled != 1))
-          $filter .= ' AND ride-status.meta_value != 3 ';
+      if ($oldschedule != 0 || ($role != 'ride_coordinator' && $scheduled != 1)) {
+          $filter .= ' AND `ride-status` != 3 ';
+      }
       $rpod = pods('ride');
       $params = array(
-            'orderby' => 'CAST(ride_date.meta_value AS date), CAST(time.meta_value AS time), pace.index.meta_value',
+            'orderby' => 'ride_date, time, pace.index',
 	         'limit' => -1,
              'where' => $filter
         );
@@ -1466,7 +1488,7 @@ function bk_add_tours_to_hazards()
     $newtours = array( 50, 78, 80, 635, 678, 697, 701, 798, 868, 873, 906, 1025, 1052, 1221, 1226, 1470 );
 
     foreach ($newtours as $tour) {
-        $params = array( 'where' => 'tour_number.meta_value = ' . $tour );
+        $params = array( 'where' => 'tour_number = ' . (int) $tour );
         $tpods = pods('tour', $params);
         if (0 < $tpods->total()) {
             if ($tpods->fetch()) {
@@ -1565,7 +1587,7 @@ function bk_schedule_blocks()
 	$datestr = $date_obj->format('Y-m-d');
     $params = array(
         'limit' => -1,
-        'where' => "CAST(end_date.meta_value AS date) >= '$datestr'",
+        'where' => [ 'end_date >= ' . $datestr ]
     );
     $pod = pods('locationdateblock', $params);
 
@@ -1941,7 +1963,7 @@ function bike_pre_save_tour($pieces, $is_new_item) {
         $num = $pieces['fields']['tour_number']['value'];
         $pod = pods('tour');
         $params = array(
-            'where' => 'CAST(tour_number.meta_value AS unsigned) = ' .  $num
+            'where' => 'tour_number = ' .  (int) $num
         );
         $pod->find($params);
         if ($pod->total() > 0)
@@ -1999,7 +2021,8 @@ function bike_custom_pods_update_terms_on_save( $pieces, $is_new_item, $id ) {
         $pod->save('tour_number', $tourno);
 	}
     if ($cueid > 0) {
-        $filepath = get_post_meta($cueid, '_wp_attached_file', true);
+        // $filepath = get_post_meta($cueid, '_wp_attached_file', true);
+        $filepath = $pod->field('cue_sheet.guid');
         $new_cuenum = 0;
         if (!empty($filepath)) {
             if ($cue_sheet_number == 0) {
@@ -2941,8 +2964,8 @@ function tour_counts()
     $end_date = $ed->format('Y-m-d');
     $params = array(
         'limit' => -1,
-        'where' => "`ride-status`.meta_value = 4 AND CAST(ride_date.meta_value AS date) >= '$start_date' AND CAST(ride_date.meta_value AS date) < '$end_date'",
-        'orderby' => 'CAST(ride_date.meta_value AS date) ASC',
+        'where' => "`ride-status` = 4 AND ride_date >= '$start_date' AND ride_date < '$end_date'",
+        'orderby' => 'ride_date ASC',
     );
     $pod = pods('ride', $params);
     while ($pod->fetch()) {
@@ -3113,7 +3136,7 @@ function bk_ride_date_loc_prohibited($date, $tourid)
 	$startid = $start ? $start['ID'] : 0;
     $params = array(
         'limit' => -1,
-        'where' => "CAST(end_date.meta_value AS date) <= '$datestr' AND CAST(start_date.meta_value AS date) > '$datestr_minus_one'",
+        'where' => "end_date <= '$datestr' AND start_date > '$datestr_minus_one'",
     );
     $pod = pods('locationdateblock', $params);
 
@@ -3157,7 +3180,7 @@ function rideleader_signupcheck($start_time, $tourid)
 	$max_time->add($interval);
     $params = array(
         'limit' => -1,
-        'where' => "`ride-status`.meta_value = 0 AND CAST(ride_date.meta_value AS date) = '" . $start_time->format("Y-m-d") . "' AND CAST(time.meta_value AS time) >= '" . $min_time->format("H:i") . "' AND CAST(time.meta_value AS time) <= '" . $max_time->format("H:i") . "'",
+        'where' => "`ride-status` = 0 AND ride_date = '" . $start_time->format("Y-m-d") . "' AND time >= '" . $min_time->format("H:i") . "' AND time <= '" . $max_time->format("H:i") . "'",
     );
     // error_log(print_r($params, true));
     $pod = pods('ride', $params);
@@ -3198,7 +3221,7 @@ function ride_leadercheck($ridestart, $userid = 0)
 	$end_time = $ed->format('H:i');
     $params = array(
         'limit' => -1,
-        'where' => "ride_leader.ID = $userid AND `ride-status`.meta_value = 0 AND CAST(ride_date.meta_value AS date) = '$ride_date' AND CAST(time.meta_value AS time) >= '$start_time' AND CAST(time.meta_value AS time) <= '$end_time'",
+        'where' => "ride_leader.ID = $userid AND `ride-status` = 0 AND ride_date = '$ride_date' AND time >= '$start_time' AND time <= '$end_time'",
     );
     $pod = pods('ride', $params);
 	if ($pod->total() > 0) {
@@ -3600,7 +3623,7 @@ function bike_start_choices($val)
     $params = array(
         'orderby' => 't.post_title' ,
         'limit' => -1,
-        'where' => 'active.meta_value = 1'
+        'where' => 'active = 1'
     );
     $pod->find($params);
     while( $pod->fetch()) {
@@ -3735,7 +3758,7 @@ function bike_ride_post_save_function($pieces, $is_new_item, $id) {
     // then change the status to ridden
     if ($canceled == "Yes") {
         if ($current_status == 0 || empty($current_status) ) {
-            update_post_meta($id, 'ride-status', 2);
+		    $pod->save('ride-status', 2);
 			$current_status = 2;
 			bk_do_ride_cancellation($id);
 	    }
@@ -3747,8 +3770,8 @@ function bike_ride_post_save_function($pieces, $is_new_item, $id) {
         bk_send_ride_email_if_needed($pod, $id, $userid);
     }
     else if (empty($current_status) || $current_status == 0) {
-			if ("" !== $rideleadername && stripos($rideleadername, "needs") == false  && stripos($rideleadername, "proposed" ) == false ) {
-            update_post_meta($id, 'ride-status', 0);
+		if ("" !== $rideleadername && stripos($rideleadername, "needs") == false  && stripos($rideleadername, "proposed" ) == false ) {
+		    $pod->save('ride-status', 0);
 			$current_status =  0;
             // check if the time of the ride is in the past
 	        $tz = new DateTimeZone(wp_timezone_string());
@@ -3757,13 +3780,13 @@ function bike_ride_post_save_function($pieces, $is_new_item, $id) {
 			$email_sent = $pod->field('email_sent');
             if ((empty($email_sent) || $email_sent == 0) && $ridedate >= $curdate) {
                 bk_send_adhoc_email($id);
-				update_post_meta($id, 'email_sent', 1);
+		        $pod->save('email_sent', 1);
 	            bk_remove_from_other_rides($userid, $id, 1);
 		    }
 	    }
     }
 	if (empty($current_status)) {
-        update_post_meta($id, 'ride-status', 0);
+		$pod->save('ride-status', 0);
     }
     add_action('pods_api_post_save_pod_item_ride', 'bike_ride_post_save_function', 10, 3);
     bk_clear_cache();
@@ -3996,26 +4019,26 @@ function bike_tour_list_func($atts)
         $tourlast = get_transient('tourlast_arr');
         $tourcnt = get_transient('tourcnt_arr');
     }
-    $filter = 'active.meta_value LIKE "' . $active . '" AND tour_type.meta_value = ' . $type;
+    $filter = 'active LIKE "' . $active . '" AND tour_type = ' . $type;
     if (!empty($tourno))
-        $filter .= ' AND CAST(tour_number.meta_value AS unsigned) = ' . $tourno;
+        $filter .= ' AND tour_number = ' . (int) $tourno;
     if (!empty($tourname))
         $filter .= ' AND t.post_title LIKE "%' . $tourname . '%"';
     if (!empty($minlength))
-        $filter .= ' AND miles.meta_value >= ' . $minlength;
+        $filter .= ' AND miles >= ' . $minlength;
     if (!empty($maxlength))
-        $filter .= ' AND miles.meta_value <= ' . $maxlength;
+        $filter .= ' AND miles <= ' . $maxlength;
     if (!empty($terrain))
         $filter .= ' AND tour-terrain.post_title = "' . $terrain . '"';
     if (!empty($startpt))
         $filter .= ' AND start_point.post_title LIKE "%' . $startpt . '%"';
     if (!empty($tournotes))
-        $filter .= ' AND tour_comments.meta_value LIKE "%' . $tournotes . '%"';
+        $filter .= ' AND tour_comments LIKE "%' . $tournotes . '%"';
     if (!empty($creator))
-        $filter .= ' AND creator.meta_value LIKE "%' . $creator . '%"';
+        $filter .= ' AND creator LIKE "%' . $creator . '%"';
     $tpod = pods('tour');
     $params = array(
-            'orderby' => 'CAST(tour_number.meta_value AS unsigned)' ,
+            'orderby' => 'tour_number',
 	         'limit' => -1,
              'where' => $filter
         );
@@ -4751,7 +4774,7 @@ function bk_display_contacts_func()
     </tbody>';
     $pod = pods('role');
     $params = array(
-       'orderby' => 'index.meta_value',
+       'orderby' => 'index',
        'limit' => -1
     );
     $pod->find($params);
@@ -5592,7 +5615,7 @@ function bk_member_ride_report()
 	}
     $params = array(
         'limit' => -1,
-        'where' => "(`ride-status`.meta_value = 2 OR `ride-status`.meta_value = 4) AND CAST(ride_date.meta_value AS date) >= '" . $daterange['start_date'] . "' AND CAST(ride_date.meta_value AS date) < '" . $daterange['end_date'] . "'",
+        'where' => "(`ride-status` = 2 OR `ride-status` = 4) AND ride_date >= '" . $daterange['start_date'] . "' AND ride_date < '" . $daterange['end_date'] . "'",
     );
     $pod = pods('ride', $params);
     if ($pod->total() > 0) {
@@ -5711,7 +5734,7 @@ function bk_ride_leader_report()
 	$ridercnt = [];
     $params = array(
         'limit' => -1,
-        'where' => "(`ride-status`.meta_value = 2 OR `ride-status`.meta_value = 4) AND CAST(ride_date.meta_value AS date) >= '" . $daterange['start_date'] . "' AND CAST(ride_date.meta_value AS date) < '" . $daterange['end_date'] . "'",
+        'where' => "(`ride-status` = 2 OR `ride-status` = 4) AND ride_date >= '" . $daterange['start_date'] . "' AND ride_date < '" . $daterange['end_date'] . "'",
     );
     $pod = pods('ride', $params);
 	// error_log(print_r($query, true));
@@ -7137,7 +7160,6 @@ function bk_become_ride_leader() {
 		// $rpod->save('ride-status', 0);
         wp_update_post([ 'ID' => $rideid, 'post_author' => $userid ]);
 		$rpod->save('ride_leader', $userid);
-		// update_post_meta($rideid, '_pods_ride_leader', [ $userid ]);
 		$rpod->save('ride-status', 0);
         bk_add_ride_leader_to_ride($rideid, $rpod);
         bk_send_ride_email_if_needed($rpod, $rideid, $userid);
@@ -7423,7 +7445,7 @@ if ( defined( 'WP_CLI' ) && WP_CLI ) {
         wp_cache_flush();
         WP_CLI::success( $dry_run ? "Simulation finished." : "Deep Migration complete!" );
     } );
-WP_CLI::add_command( 'turbo-migrate-pod', function( $args, $assoc_args ) {
+    WP_CLI::add_command( 'turbo-migrate-pod', function( $args, $assoc_args ) {
         global $wpdb;
 
         if ( empty( $args ) ) {
@@ -7444,69 +7466,58 @@ WP_CLI::add_command( 'turbo-migrate-pod', function( $args, $assoc_args ) {
 
         WP_CLI::log( "--- Starting Unified Turbo Sync for $pod_name ---" );
 
-        // 1. Ensure Table Structure & IDs
+        // 1. Structure & ID Sync
         if ( ( $pod_data['storage'] ?? 'meta' ) !== 'table' ) {
             $api->save_pod( [ 'id' => $pod_id, 'name' => $pod_name, 'storage' => 'table' ] );
         }
         $wpdb->query( "INSERT IGNORE INTO `$table_name` (id) SELECT ID FROM {$wpdb->posts} WHERE post_type = '$pod_name'" );
 
-        // 2. Process Fields
+        // 2. Field Migration & Indexing
         foreach ( $pod_data['fields'] as $field ) {
             $f_name   = $field['name'];
             $f_id     = $field['id'];
             $type     = $field['type'];
-            $is_multi = ( ( $type === 'pick' || $type === 'relationship' ) && ( $field['options']['pick_format_type'] ?? '' ) === 'multi' );
+            
+            // Check for Multi-select (Junction Table)
+            $is_multi = ( ( $type === 'pick' || $type === 'relationship' || $type === 'file' ) && ( $field['options']['file_multi'] ?? $field['options']['pick_format_type'] ?? '' ) === 'multi' );
 
             if ( $is_multi ) {
                 WP_CLI::log( "Syncing Multi-select: $f_name..." );
-                
-                // Determine the correct junction table
                 $rel_table = $wpdb->prefix . 'pods_rel_' . $f_name;
                 $is_table_based = (bool) $wpdb->get_var( "SHOW TABLES LIKE '$rel_table'" );
                 
                 if ( $is_table_based ) {
-                    // Custom Junction Table Sync
-                    $wpdb->query( $wpdb->prepare( "
-                        INSERT IGNORE INTO `$rel_table` (item_id, related_item_id)
-                        SELECT post_id, meta_value FROM {$wpdb->postmeta} 
-                        WHERE meta_key = %s AND meta_value != ''", $f_name ) );
+                    $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO `$rel_table` (item_id, related_item_id) SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value != ''", $f_name ) );
                 } else {
-                    // Global Relationship Table Sync
-                    $wpdb->query( $wpdb->prepare( "
-                        INSERT IGNORE INTO `{$wpdb->prefix}pods_rel` (pod_id, item_id, related_item_id, field_id)
-                        SELECT %d, post_id, meta_value, %d FROM {$wpdb->postmeta} 
-                        WHERE meta_key = %s AND meta_value != ''", $pod_id, $f_id, $f_name ) );
+                    $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO `{$wpdb->prefix}pods_rel` (pod_id, item_id, related_item_id, field_id) SELECT %d, post_id, meta_value, %d FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value != ''", $pod_id, $f_id, $f_name ) );
                 }
             } else {
                 WP_CLI::log( "Syncing Standard Column: $f_name..." );
                 
-                // Standard SQL Update
-                $wpdb->query( $wpdb->prepare( "
-                    UPDATE `$table_name` AS p
-                    JOIN {$wpdb->postmeta} AS m ON p.id = m.post_id
-                    SET p.`$f_name` = m.meta_value
-                    WHERE m.meta_key = %s", $f_name ) );
+                // Bulk SQL Update
+                $wpdb->query( $wpdb->prepare( "UPDATE `$table_name` AS p JOIN {$wpdb->postmeta} AS m ON p.id = m.post_id SET p.`$f_name` = m.meta_value WHERE m.meta_key = %s", $f_name ) );
 
-                // Auto-Index
-                if ( in_array($type, ['pick', 'relationship', 'number', 'float', 'decimal', 'currency', 'date']) ) {
+                // NEW: Auto-Index (Now including 'file' types)
+                $eligible_for_index = ['pick', 'relationship', 'file', 'number', 'float', 'decimal', 'currency', 'date'];
+                if ( in_array( $type, $eligible_for_index ) ) {
                     $index_name = "idx_" . str_replace('-', '_', $f_name);
                     $wpdb->query( "ALTER TABLE `$table_name` ADD INDEX IF NOT EXISTS `$index_name` (`$f_name`)" );
+                    WP_CLI::log( "  -> Index added for $f_name" );
                 }
             }
         }
 
         // 3. Optional Cleanup
         if ( $cleanup ) {
-            WP_CLI::confirm( "Delete redundant meta for $pod_name?", $assoc_args );
             $field_names = array_column( $pod_data['fields'], 'name' );
             $meta_keys = implode( "','", array_map( 'esc_sql', $field_names ) );
             $wpdb->query( $wpdb->prepare( "DELETE m FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON m.post_id = p.ID WHERE p.post_type = %s AND m.meta_key IN ('$meta_keys')", $pod_name ) );
         }
 
         wp_cache_flush();
-        WP_CLI::success( "Unified Migration complete!" );
-    });
-WP_CLI::add_command( 'mafw-rel-integrity', function( $args ) {
+        WP_CLI::success( "Unified Turbo Sync for $pod_name complete!" );
+    } );
+    WP_CLI::add_command( 'mafw-rel-integrity', function( $args ) {
         global $wpdb;
 
         WP_CLI::log( "--- Running Relationship Integrity Report ---" );
@@ -7553,7 +7564,7 @@ WP_CLI::add_command( 'mafw-rel-integrity', function( $args ) {
             WP_CLI::success( "Ride-to-Tour integrity is solid!" );
         }
     });
-WP_CLI::add_command( 'mafw-db-purge-orphans', function() {
+    WP_CLI::add_command( 'mafw-db-purge-orphans', function() {
         global $wpdb;
 
         // 1. Count orphans first
