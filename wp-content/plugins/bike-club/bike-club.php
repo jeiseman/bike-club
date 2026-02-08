@@ -820,9 +820,15 @@ function bike_rides_need_updating()
 {
     $msg = "";
     if (current_user_can('rideleader') || current_user_can('manage_options')) {
-	    $tz = new DateTimeZone(wp_timezone_string());
+        $tz = new DateTimeZone(wp_timezone_string());
         $curdt = new DateTime("now", $tz);
-        $curdate = $curdt->format('Y-m-d');
+        $thisYearMarch = new DateTime('first day of March this year');
+        if ($currdt < $thisYearMarch) {
+            // If we haven't hit March 1st yet, get it for last year
+            $lastMarch1st = new DateTime('first day of March last year');
+        } else {
+            $lastMarch1st = $thisYearMarch;
+        }
         $params = array(
             'limit' => 1,
             'where' => array(
@@ -832,18 +838,18 @@ function bike_rides_need_updating()
                       'compare' => '='
                   ),
                   array(
-                      'key'     => 'ride-status', // No backticks, no .meta_value
+                      'key'     => 'ride-status',
                       'value'   => 0,
                       'compare' => '='
                   ),
                   array(
                       'key'     => 'ride_date',
-                      'value'   => $curdate,
+                      'value'   => $curdt->format('Y-m-d'),
                       'compare' => '<'
                   ),
                   array(
                       'key'     => 'ride_date',
-                      'value'   => '2023-03-01',
+                      'value'   => $lastMarch1st->format('Y-m-d'),
                       'compare' => '>='
                   )
               ),
