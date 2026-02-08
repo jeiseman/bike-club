@@ -195,10 +195,7 @@ function bk_find_wl_apod($rpod)
 		$userid_arr = array();
 		sort($attendees);
         foreach ($attendees as $attendee) {
-			if (!is_array($attendee))
-		        $attendeeid = $attendee;
-			else
-		        $attendeeid = $attendee['ID'];
+		    $attendeeid = $attendee['ID'];
 			$userid = get_post_field('post_author', $attendeeid);
 			if (empty($userid) || $userid == 0)
 			    continue;
@@ -375,10 +372,7 @@ function bikeride_mystatus_function() {
 			$userid_arr = array();
 		    sort($attendees);
             foreach ($attendees as $attendee) {
-				if (!is_array($attendee))
-			        $attendeeid = $attendee;
-				else
-			        $attendeeid = $attendee['ID'];
+			    $attendeeid = $attendee['ID'];
 			    $userid = get_post_field('post_author', $attendeeid);
 			    if (empty($userid) || $userid == 0)
 			        continue;
@@ -1380,7 +1374,7 @@ function bk_get_signup_id_list($rpod)
 	$attendees = $rpod->field('attendees');
 	if (!empty($attendees)) {
 		foreach ($attendees as $attendee) {
-            $attendeeid = $attendee;
+            $attendeeid = $attendee['ID'];
 			$userid = get_post_field('post_author', $attendeeid);
 			if (empty($userid) || $userid == 0 || $userid == PROPOSED_RIDE_LEADER_USERID)
 			    continue;
@@ -1416,14 +1410,16 @@ function bk_get_signup_list($rpod, &$signups, &$waitlist, &$curuser_aid)
 		$userid_arr = array();
 	    sort($attendees);
 		foreach ($attendees as $attendee) {
-            $attendeeid = $attendee;
+            $attendeeid = $attendee['ID'];
 			$userid = get_post_field('post_author', $attendeeid);
-			if (empty($userid) || $userid == 0)
+			if (empty($userid) || $userid == 0) {
 			    continue;
+			}
 			if (!array_key_exists($userid, $userid_arr))
 			    $userid_arr[$userid] = $attendeeid;
-			else
+			else {
 			    continue;
+			}
             $user = get_userdata($userid);
 			$date_registered = preg_replace("!([^ ]*) .*!", "$1", $user->user_registered);
 			if ($user->ID == $curruserid)
@@ -2416,10 +2412,7 @@ function bk_rl_update_ride($entry)
 			$userid_arr = array();
             sort($attendees);
             foreach ($attendees as $attendee) {
-				if (!is_array($attendee))
-			        $attendeeid = $attendee;
-				else
-			        $attendeeid = $attendee['ID'];
+			    $attendeeid = $attendee['ID'];
 			    $userid = get_post_field('post_author', $attendeeid);
 			    if (empty($userid) || $userid == 0)
 			        continue;
@@ -2687,10 +2680,7 @@ function bk_broadcast_email($fromname, $subject, $msg, $from, $replyto, $sendto,
 	            $attendees = $rpod->field('attendees');
 	            if (!empty($attendees)) {
 		            foreach ($attendees as $attendee) {
-						if (!is_array($attendee))
-			                $attendeeid = $attendee;
-						else
-			                $attendeeid = $attendee['ID'];
+			            $attendeeid = $attendee['ID'];
 			            $userid = get_post_field('post_author', $attendeeid);
 			            if (empty($userid) || $userid == 0)
 			                continue;
@@ -3063,10 +3053,7 @@ function bk_user_on_ride($rideid, $riderid)
 	if (!empty($attendees)) {
 		$userid_arr = array();
 	    foreach ($attendees as $attendee) {
-			if (!is_array($attendee))
-			    $attendeeid = $attendee;
-			else
-			    $attendeeid = $attendee['ID'];
+			$attendeeid = $attendee['ID'];
 			$userid = get_post_field('post_author', $attendeeid);
 			if (empty($userid) || $userid == 0)
 			    continue;
@@ -3098,10 +3085,7 @@ function rider_signupcheck($start_time, $rideid)
 	$max_time->add($interval);
 	if (!empty($attendees)) {
 	    foreach ($attendees as $attendee) {
-		    if (!is_array($attendee))
-			    $attendeeid = $attendee;
-			else
-			    $attendeeid = $attendee['ID'];
+			$attendeeid = $attendee['ID'];
 			$userid = get_post_field('post_author', $attendeeid);
 			if (empty($userid) || $userid == 0)
 			    continue;
@@ -4374,10 +4358,7 @@ function bk_signinsheet_func()
 		$userid_arr = array();
         sort($attendees);
 		foreach ($attendees as $attendee) {
-			if (!is_array($attendee))
-			    $attendeeid = $attendee;
-			else
-			    $attendeeid = $attendee['ID'];
+			$attendeeid = $attendee['ID'];
 			$userid = get_post_field('post_author', $attendeeid);
 			if (empty($userid) || $userid == 0)
 			    continue;
