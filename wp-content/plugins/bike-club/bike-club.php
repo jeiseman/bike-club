@@ -823,7 +823,7 @@ function bike_rides_need_updating()
         $tz = new DateTimeZone(wp_timezone_string());
         $curdt = new DateTime("now", $tz);
         $thisYearMarch = new DateTime('first day of March this year');
-        if ($currdt < $thisYearMarch) {
+        if ($curdt < $thisYearMarch) {
             // If we haven't hit March 1st yet, get it for last year
             $lastMarch1st = new DateTime('first day of March last year');
         } else {
